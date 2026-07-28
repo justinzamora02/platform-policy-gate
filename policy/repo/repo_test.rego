@@ -25,6 +25,14 @@ test_repo_001_accepts_alternate_license_names if {
 	}
 }
 
+# Conftest hands every package every file it was pointed at, so the rule has to
+# stay silent on documents that are not inventories. The failure mode is a
+# manifest reported as missing a LICENSE, which is why it is asserted directly.
+test_repo_001_ignores_non_inventory_documents if {
+	ids(fixtures.kubernetes["pod-compliant"]) == set()
+	ids(fixtures.github.compliant) == set()
+}
+
 test_repo_001_message_is_structured if {
 	some msg in repo.deny with input as fixtures.repo["license-missing"]
 	msg.severity == "medium"

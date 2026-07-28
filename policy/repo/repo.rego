@@ -20,7 +20,13 @@ package repo
 import rego.v1
 
 # REPO-001: a LICENSE file must be present at the repository root.
+#
+# The `files` check scopes the rule to inventory documents, the way
+# kubernetes.lib.pod_spec scopes the manifest rules. Without it the absent key
+# makes `not has_license` true, so every workflow and rendered manifest conftest
+# is pointed at reports a missing LICENSE.
 deny contains msg if {
+	is_array(input.files)
 	not has_license
 
 	msg := {
