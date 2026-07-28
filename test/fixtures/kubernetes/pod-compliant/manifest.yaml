@@ -1,0 +1,41 @@
+# Pass fixture for K8S-001 through K8S-004, and the bare-Pod traversal case.
+#
+# Hardened past what these four rules check so it stays a valid pass fixture as
+# the K8S-005+ rules land.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+  initContainers:
+    - name: init
+      image: registry.example.com/init:1.0.0
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]

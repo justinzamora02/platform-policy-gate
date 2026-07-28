@@ -1,0 +1,17 @@
+# K8S-004 fail fixture. The emptyDir volume alongside it must not be reported.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hostpath-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+  volumes:
+    - name: cache
+      emptyDir: {}
+    - name: docker-socket
+      hostPath:
+        path: /var/run/docker.sock
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0

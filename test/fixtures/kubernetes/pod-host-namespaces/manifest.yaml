@@ -1,0 +1,15 @@
+# K8S-003 fail fixture. All three host namespaces are set, so the rule must
+# emit three findings rather than stopping at the first.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: host-namespaces-pod
+spec:
+  hostNetwork: true
+  hostPID: true
+  hostIPC: true
+  securityContext:
+    runAsNonRoot: true
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
