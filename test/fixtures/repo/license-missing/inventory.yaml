@@ -1,0 +1,5 @@
+# REPO-001 fail fixture.
+files:
+  - .github/workflows/test.yml
+  - Makefile
+  - README.md
