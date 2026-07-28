@@ -1,15 +1,14 @@
-# K8S-001 fail fixture. Compliant on every other rule so the assertion can
-# require exactly {"K8S-001"} and catch a rule that over-fires.
+# K8S-007 fail fixture: an explicit `:latest`.
 apiVersion: v1
 kind: Pod
 metadata:
-  name: privileged-pod
+  name: latest-tag-pod
 spec:
   securityContext:
     runAsNonRoot: true
   containers:
     - name: app
-      image: registry.example.com/app:1.0.0
+      image: registry.example.com/app:latest
       resources:
         requests:
           cpu: 100m
@@ -18,7 +17,6 @@ spec:
           cpu: 500m
           memory: 256Mi
       securityContext:
-        privileged: true
         readOnlyRootFilesystem: true
         capabilities:
           drop: [ALL]

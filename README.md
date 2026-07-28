@@ -41,6 +41,9 @@ package, keyed by the package it configures.
 | K8S-002 | Containers must run as non-root |
 | K8S-003 | No `hostNetwork`, `hostPID`, or `hostIPC` |
 | K8S-004 | No `hostPath` volumes |
+| K8S-005 | CPU and memory requests and limits required |
+| K8S-006 | Images from registries in `data/k8s.yaml` |
+| K8S-007 | No `:latest` and no untagged images |
 
 **GitHub Actions** (`policy/github`) — evaluated against workflow files:
 
@@ -66,10 +69,10 @@ Conftest defaults to the `main` namespace, so evaluating a package directly
 means naming it:
 
 ```sh
-conftest test --policy policy --namespace kubernetes rendered.yaml
+conftest test --policy policy --data data/ --namespace kubernetes rendered.yaml
 ```
 
-GHA-002 and GHA-003 read their allowlists from `data/`, so widening one is a
+K8S-006, GHA-002, and GHA-003 read their allowlists from `data/`, so widening one is a
 review of a YAML file, not a change to Rego:
 
 ```sh
@@ -83,6 +86,11 @@ so the trigger key reaches a policy as `"on"`, `"true"`, or `true` depending on
 the parser (`conftest parse` any workflow to see it). Zizmor owns the deeper
 analysis: template injection, excessive permissions, artifact poisoning. This
 package does not attempt any of that.
+
+`--data data/` is not optional. K8S-006 and GHA-002 fail closed without it — an
+allowlist that never loaded approves nothing, so the check goes red rather than
+silently green. See the note on `approved_registries` under Kubernetes below for
+how that is arranged, and why it does not come for free.
 
 Repo-hygiene rules evaluate a repository inventory rather than a manifest:
 
@@ -108,7 +116,7 @@ same privileges as the rest of the pod, so a policy set that only reads
 for every other kind, which is what keeps the rules silent on the Services and
 ConfigMaps that come out of the same `helm template` run.
 
-Two things this package is deliberate about:
+Four things this package is deliberate about:
 
 - **`securityContext` inheritance.** Fields inherit pod → container, but a
   container setting `runAsNonRoot: false` under a pod that sets `true` must
@@ -116,6 +124,21 @@ Two things this package is deliberate about:
   "container value, or else pod value" fallback reads the explicit `false` as
   absent and passes exactly the manifest the rule exists to catch, so both
   levels are read through `object.get` instead.
+- **Image references are parsed, not pattern-matched.** A registry is only a
+  registry when the first path component looks like a host (a dot, a port, or
+  `localhost`), so `nginx:1.27` resolves to `docker.io` rather than to a
+  registry named `nginx:1.27`, and `myorg/app` to `docker.io` rather than to
+  one named `myorg` — Docker Hub being exactly what an allowlist needs to
+  catch. Tags are read from the last path component only, so the port in
+  `localhost:5000/app` is not mistaken for a tag, and a `@sha256:` digest is
+  accepted in place of one instead of being read as a tag named after its hex.
+- **The allowlist is read through a comprehension.** `approved_registries` is
+  built as `{r | some r in data.k8s.approved_registries}` rather than tested
+  against directly, and the difference is not cosmetic: `not registry in
+  data.k8s.approved_registries` *passes every image* when that data was never
+  loaded, so a run that forgot `--data data/` goes green. Comprehending over
+  the same undefined reference yields an empty set, so an absent allowlist
+  approves nothing and the check fails closed.
 - **Traversal is tested on its own.** A traversal gap fails *open* — a kind
   that resolves to no PodSpec yields no containers and therefore no findings,
   so every rule test still passes. `lib_test.rego` asserts the reachable

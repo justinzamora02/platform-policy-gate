@@ -1,0 +1,42 @@
+# K8S-007 fail fixture for the implicit case, paired with the form that is
+# allowed to have no tag.
+#
+# `app` carries no tag, which resolves to `:latest` at pull time and must be
+# reported. `init` carries a digest instead of a tag — the one immutable
+# reference form — and must not be, which a rule written as "deny when there is
+# no colon-tag" would get wrong.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: untagged-image-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+  initContainers:
+    - name: init
+      image: registry.example.com/init@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+  containers:
+    - name: app
+      image: registry.example.com/app
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]

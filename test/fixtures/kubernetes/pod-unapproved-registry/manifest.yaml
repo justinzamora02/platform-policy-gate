@@ -1,17 +1,18 @@
-# K8S-001 fail fixture where only the init container is privileged.
+# K8S-006 fail fixture covering both ways an image leaves the allowlist.
 #
-# The regular container is clean, so a traversal that walks `spec.containers`
-# alone reports nothing here. That is the bug this fixture exists to catch.
+# `app` names an unapproved registry outright. `init` names none at all, which
+# resolves to docker.io at pull time — the finding has to say docker.io rather
+# than treating the absent component as nothing to check.
 apiVersion: v1
 kind: Pod
 metadata:
-  name: privileged-init-pod
+  name: unapproved-registry-pod
 spec:
   securityContext:
     runAsNonRoot: true
   initContainers:
     - name: init
-      image: registry.example.com/init:1.0.0
+      image: busybox:1.36
       resources:
         requests:
           cpu: 50m
@@ -20,10 +21,12 @@ spec:
           cpu: 100m
           memory: 128Mi
       securityContext:
-        privileged: true
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
   containers:
     - name: app
-      image: registry.example.com/app:1.0.0
+      image: quay.io/vendor/app:2.1.0
       resources:
         requests:
           cpu: 100m

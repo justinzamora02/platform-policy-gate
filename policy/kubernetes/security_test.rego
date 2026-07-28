@@ -67,7 +67,7 @@ test_k8s_001_allows_privileged_false if {
 		},
 	}
 
-	ids(pod) == set()
+	not "K8S-001" in ids(pod)
 }
 
 # K8S-002
@@ -111,7 +111,7 @@ test_k8s_003_allows_host_namespaces_set_to_false if {
 		},
 	}
 
-	ids(pod) == set()
+	not "K8S-003" in ids(pod)
 }
 
 # K8S-004
