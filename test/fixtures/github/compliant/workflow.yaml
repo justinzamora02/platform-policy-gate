@@ -1,0 +1,17 @@
+# GHA-001/002/003 pass fixture: SHA-pinned approved actions, approved runner,
+# plus a local action and a `run:` step, neither of which any rule applies to.
+#
+# `on:` is deliberately unquoted — this fixture is also what proves the parser
+# handles the YAML 1.1 boolean key.
+name: build
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - uses: open-policy-agent/setup-opa@b2b258e089860efaadaaf71bf6e3aecb4a3eeff1 # v2.4.0
+      - uses: ./.github/actions/internal-setup
+      - run: make check

@@ -21,13 +21,15 @@ Both accept `OPA=` / `CONFTEST=` overrides if your binaries live elsewhere.
 policy/<package>/*.rego          policies, one package per domain
 policy/<package>/*_test.rego     unit tests, colocated
 test/fixtures/<package>/<case>/  fixture documents
-data/                            allowlists the policies read from
+data/<package>.yaml              config and allowlists a package reads from
 scripts/                         helpers used by make and by the workflow
 ```
 
-Fixtures are loaded by directory, not by filename: `opa test policy/ test/`
+Fixtures are loaded by directory, not by filename: `opa test policy/ test/ data/`
 puts `test/fixtures/repo/license-missing/inventory.yaml` at
-`data.fixtures.repo["license-missing"]`.
+`data.fixtures.repo["license-missing"]`. Files directly under a load root merge
+at the top, so `data/gha.yaml` lands on `data.gha` — one config document per policy
+package, keyed by the package it configures.
 
 ## Rules
 
@@ -40,6 +42,14 @@ puts `test/fixtures/repo/license-missing/inventory.yaml` at
 | K8S-003 | No `hostNetwork`, `hostPID`, or `hostIPC` |
 | K8S-004 | No `hostPath` volumes |
 
+**GitHub Actions** (`policy/github`) — evaluated against workflow files:
+
+| ID | Rule |
+|---|---|
+| GHA-001 | Third-party actions pinned to a full commit SHA |
+| GHA-002 | Actions appear in the `approved_actions` list in `data/gha.yaml` |
+| GHA-003 | Runner labels appear in the `approved_runners` list in `data/gha.yaml` |
+
 **Repo hygiene** (`policy/repo`):
 
 | ID | Rule |
@@ -49,7 +59,8 @@ puts `test/fixtures/repo/license-missing/inventory.yaml` at
 Every rule emits a structured object — `msg` for the human text (Conftest
 requires it under that key), plus `id`, `severity`, `enforcement`, and
 `resource`, which Conftest surfaces under `metadata` for the aggregation step.
-Container-scoped findings add `container`.
+Container-scoped findings add `container`; workflow findings add `action` or
+`runner`.
 
 Conftest defaults to the `main` namespace, so evaluating a package directly
 means naming it:
@@ -57,6 +68,21 @@ means naming it:
 ```sh
 conftest test --policy policy --namespace kubernetes rendered.yaml
 ```
+
+GHA-002 and GHA-003 read their allowlists from `data/`, so widening one is a
+review of a YAML file, not a change to Rego:
+
+```sh
+conftest test --policy policy --namespace github --data data/ \
+  .github/workflows/test.yml
+```
+
+GHA-001 overlaps with [Zizmor](https://docs.zizmor.sh/) by design. It is
+written in Rego to show the parsing — notably that `on:` is a YAML 1.1 boolean,
+so the trigger key reaches a policy as `"on"`, `"true"`, or `true` depending on
+the parser (`conftest parse` any workflow to see it). Zizmor owns the deeper
+analysis: template injection, excessive permissions, artifact poisoning. This
+package does not attempt any of that.
 
 Repo-hygiene rules evaluate a repository inventory rather than a manifest:
 

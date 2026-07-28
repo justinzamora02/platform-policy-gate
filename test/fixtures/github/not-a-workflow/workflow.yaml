@@ -1,0 +1,9 @@
+# Scope fixture: an action definition, not a workflow. It has `runs:` and a
+# `uses:` that would trip GHA-001 if the package matched on `uses:` alone.
+name: internal-setup
+description: composite action, not a workflow
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      shell: bash

@@ -1,0 +1,10 @@
+# GHA-001 fail fixture: the action is approved, but pinned to a mutable tag.
+name: build
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5

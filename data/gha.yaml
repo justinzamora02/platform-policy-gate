@@ -1,0 +1,41 @@
+# Configuration for the policy/github package.
+#
+# The list is the policy. Adding an entry here is the review gate; the Rego
+# never changes.
+#
+# Loaded as `data.gha` — `opa test` and `conftest` strip the `data/` root and
+# merge each file's top-level keys, so the key below is what namespaces this
+# config, not the filename. It is `gha` rather than `github` so that base data
+# and the `github` policy package stay in separate namespaces: OPA permits them
+# to share one, but then a rule named after a key here becomes a runtime
+# conflict rather than a compile error.
+gha:
+  # GHA-002: actions permitted, as `owner/repo` without a ref. Subpath actions
+  # (`owner/repo/path@ref`) match on `owner/repo`, because that is the unit a
+  # review approves.
+  approved_actions:
+    - actions/cache
+    - actions/checkout
+    - actions/download-artifact
+    - actions/github-script
+    - actions/setup-go
+    - actions/setup-node
+    - actions/setup-python
+    - actions/upload-artifact
+    - docker/build-push-action
+    - docker/login-action
+    - docker/setup-buildx-action
+    - hadolint/hadolint-action
+    - open-policy-agent/setup-opa
+
+  # GHA-003: permitted runner labels. Every label in a job's `runs-on` must
+  # appear here, so a self-hosted job cannot smuggle itself in by adding an
+  # extra label next to an approved one.
+  approved_runners:
+    - ubuntu-latest
+    - ubuntu-24.04
+    - ubuntu-22.04
+    - macos-latest
+    - macos-15
+    - windows-latest
+    - windows-2022
