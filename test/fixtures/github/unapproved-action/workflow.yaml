@@ -1,0 +1,11 @@
+# GHA-002 fail fixture: correctly SHA-pinned, but not on the allowlist.
+name: release
+on:
+  push:
+    branches: [master]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: some-vendor/deploy-action@1b21df8e4b40e0b8b6c8c0c9f4d0e6a5c3b2a190

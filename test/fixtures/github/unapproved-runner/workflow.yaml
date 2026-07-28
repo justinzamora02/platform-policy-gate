@@ -1,0 +1,11 @@
+# GHA-003 fail fixture: an unapproved label riding along next to an approved
+# one, which is why the rule checks every label rather than the whole value.
+name: build
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: [ubuntu-latest, self-hosted]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0

@@ -3,13 +3,14 @@ OPA      ?= opa
 CONFTEST ?= conftest
 
 # Fixtures load as data.fixtures.* because the load root is test/ and OPA
-# derives data paths from the directory structure below it.
-POLICY_ARGS := policy/ test/
+# derives data paths from the directory structure below it. Files under data/
+# sit at the load root, so their top-level keys land directly on data.
+POLICY_ARGS := policy/ test/ data/
 
 .PHONY: test
 test: ## Run the Rego unit tests
 	$(OPA) test $(POLICY_ARGS) -v
-	$(CONFTEST) verify -p policy --data test/
+	$(CONFTEST) verify -p policy --data test/ --data data/
 
 .PHONY: fmt
 fmt: ## Format Rego sources in place
