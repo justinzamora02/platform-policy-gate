@@ -45,6 +45,41 @@ inherited_security_context(container, field) := object.get(
 	object.get(pod_spec, ["securityContext", field], null),
 )
 
+# The registry an image reference pulls from, defaulting to Docker Hub.
+#
+# The first path component counts as the registry only when it looks like a
+# host. Without that test `nginx:latest` parses as a registry named
+# `nginx:latest` and `myorg/app` as one named `myorg`, when both actually come
+# from docker.io — which is the registry an allowlist most needs to catch.
+image_registry(image) := registry if {
+	parts := split(image, "/")
+	count(parts) > 1
+	registry_host(parts[0])
+	registry := parts[0]
+} else := "docker.io"
+
+registry_host(candidate) if contains(candidate, ".")
+
+registry_host(candidate) if contains(candidate, ":")
+
+registry_host(candidate) if candidate == "localhost"
+
+# The tag on an image reference; undefined when it carries none.
+#
+# Splitting only the last path component is what keeps a registry port
+# (`localhost:5000/app`) from being read as a tag, and the digest guard keeps
+# the hex of `app@sha256:abc…` from being read as one.
+image_tag(image) := tag if {
+	not contains(image, "@")
+	parts := split(image, "/")
+	[_, tag] := split(parts[count(parts) - 1], ":")
+}
+
+# The digest an image reference pins to; undefined when it pins none.
+image_digest(image) := digest if {
+	[_, digest] := split(image, "@")
+}
+
 resource := sprintf("%s/%s", [input.kind, input.metadata.name])
 
 # Every rule emits this shape rather than a bare string. Conftest requires the

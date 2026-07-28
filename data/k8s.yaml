@@ -1,0 +1,18 @@
+# Configuration for the policy/kubernetes package.
+#
+# The list is the policy. Adding an entry here is the review gate; the Rego
+# never changes.
+#
+# Loaded as `data.k8s`, following the one-document-per-package convention in
+# data/gha.yaml. The key is `k8s` rather than `kubernetes` so that base data and
+# the `kubernetes` policy package stay in separate namespaces.
+k8s:
+  # K8S-006: registries images may be pulled from.
+  #
+  # Docker Hub is deliberately absent. An image reference with no registry
+  # component resolves to docker.io at pull time, so leaving it off is what
+  # makes a bare `nginx:1.27` fail rather than quietly pulling from the public
+  # internet.
+  approved_registries:
+    - registry.example.com
+    - ghcr.io

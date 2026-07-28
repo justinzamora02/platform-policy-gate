@@ -58,6 +58,56 @@ test_inherited_security_context_is_null_when_neither_level_sets_it if {
 	lib.inherited_security_context({"name": "app"}, "runAsNonRoot") == null with input as fixtures.kubernetes["pod-run-as-root"]
 }
 
+# Image reference parsing.
+#
+# Tabled rather than split into one test per case because the cases only mean
+# something against each other: every entry below is a reference that a naive
+# `split(image, "/")[0]` or `split(image, ":")[1]` gets wrong in one direction
+# or the other.
+test_image_registry_resolves_every_reference_form if {
+	every image, registry in {
+		"registry.example.com/app:1.0.0": "registry.example.com",
+		"ghcr.io/org/team/app:1.0.0": "ghcr.io",
+		"localhost:5000/app:1.0.0": "localhost:5000",
+		"registry.example.com:5000/app:1.0.0": "registry.example.com:5000",
+		# No host-looking first component: Docker Hub, however many path
+		# segments follow.
+		"nginx:1.27": "docker.io",
+		"nginx": "docker.io",
+		"myorg/app:1.0.0": "docker.io",
+		"library/nginx:1.27": "docker.io",
+	} {
+		lib.image_registry(image) == registry
+	}
+}
+
+test_image_tag_reads_only_the_last_path_component if {
+	every image, tag in {
+		"registry.example.com/app:1.0.0": "1.0.0",
+		"registry.example.com/app:latest": "latest",
+		"nginx:1.27": "1.27",
+		"localhost:5000/app:1.0.0": "1.0.0",
+	} {
+		lib.image_tag(image) == tag
+	}
+}
+
+test_image_tag_is_undefined_without_one if {
+	not lib.image_tag("registry.example.com/app")
+	not lib.image_tag("nginx")
+
+	# The port is the only colon here, and it is not a tag.
+	not lib.image_tag("localhost:5000/app")
+
+	# The digest hex is the only colon here, and it is not a tag either.
+	not lib.image_tag("registry.example.com/app@sha256:abc123")
+}
+
+test_image_digest_reads_the_pin if {
+	lib.image_digest("registry.example.com/app@sha256:abc123") == "sha256:abc123"
+	not lib.image_digest("registry.example.com/app:1.0.0")
+}
+
 test_resource_names_the_kind_and_the_object if {
 	lib.resource == "Deployment/compliant-deployment" with input as fixtures.kubernetes["deployment-compliant"]
 }

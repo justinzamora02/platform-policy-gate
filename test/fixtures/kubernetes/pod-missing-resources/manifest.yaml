@@ -1,0 +1,29 @@
+# K8S-005 fail fixture, with the two shapes the rule has to tell apart.
+#
+# `app` omits `resources` entirely. `init` sets a partial block, which is the
+# case a presence check on `resources` alone would pass: it has a CPU request
+# and nothing else, so three of the four paths are still missing.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: missing-resources-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+  initContainers:
+    - name: init
+      image: registry.example.com/init:1.0.0
+      resources:
+        requests:
+          cpu: 50m
+      securityContext:
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
+      securityContext:
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
