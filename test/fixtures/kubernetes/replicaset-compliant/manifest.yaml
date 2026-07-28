@@ -1,0 +1,50 @@
+# Traversal fixture: PodSpec one template down.
+#
+# ReplicaSet is rarely authored by hand, but it renders out of charts that pin
+# one directly and the traversal costs nothing extra to cover.
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: compliant-replicaset
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: compliant
+  template:
+    metadata:
+      labels:
+        app: compliant
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      initContainers:
+        - name: init
+          image: registry.example.com/init:1.0.0
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      containers:
+        - name: app
+          image: registry.example.com/app:1.0.0
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]

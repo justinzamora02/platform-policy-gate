@@ -1,0 +1,19 @@
+# K8S-002 fail fixture, and the reason inheritance is resolved with object.get
+# rather than a plain fallback.
+#
+# The pod looks compliant. The container opts back out to root, and Kubernetes
+# honours the container. Any rule written as "container value, or else pod
+# value" treats the explicit `false` as absent, reads `true` from the pod, and
+# passes this manifest — so `app` must still be reported.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: overrides-non-root-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
+      securityContext:
+        runAsNonRoot: false

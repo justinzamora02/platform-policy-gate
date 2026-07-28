@@ -1,0 +1,15 @@
+# A non-workload kind, to pin down that the package stays silent on it.
+#
+# `helm template` emits Services, ConfigMaps, and ServiceAccounts from the same
+# chart as the Deployment. If pod_spec resolved to something for these, every
+# rule would report against documents that have no containers at all.
+apiVersion: v1
+kind: Service
+metadata:
+  name: compliant-service
+spec:
+  selector:
+    app: compliant
+  ports:
+    - port: 80
+      targetPort: 8080

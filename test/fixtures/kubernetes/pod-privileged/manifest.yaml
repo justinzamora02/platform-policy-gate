@@ -1,0 +1,17 @@
+# K8S-001 fail fixture. Compliant on every other rule so the assertion can
+# require exactly {"K8S-001"} and catch a rule that over-fires.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
+      securityContext:
+        privileged: true
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]

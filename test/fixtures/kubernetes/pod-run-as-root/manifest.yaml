@@ -1,0 +1,13 @@
+# K8S-002 fail fixture: runAsNonRoot set at neither the pod nor the container
+# level. Both containers should be reported, not just the first.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: run-as-root-pod
+spec:
+  initContainers:
+    - name: init
+      image: registry.example.com/init:1.0.0
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0

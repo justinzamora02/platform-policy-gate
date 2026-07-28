@@ -1,0 +1,46 @@
+# Traversal fixture: the deepest case — PodSpec two templates down, under
+# spec.jobTemplate. A traversal that only handles `spec.template.spec` silently
+# passes every CronJob in the repo, which is why this kind gets its own fixture.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: compliant-cronjob
+spec:
+  schedule: "0 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+          initContainers:
+            - name: init
+              image: registry.example.com/init:1.0.0
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+          containers:
+            - name: app
+              image: registry.example.com/app:1.0.0
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]

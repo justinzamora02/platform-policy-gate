@@ -1,0 +1,23 @@
+# K8S-001 fail fixture where only the init container is privileged.
+#
+# The regular container is clean, so a traversal that walks `spec.containers`
+# alone reports nothing here. That is the bug this fixture exists to catch.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-init-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+  initContainers:
+    - name: init
+      image: registry.example.com/init:1.0.0
+      securityContext:
+        privileged: true
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
+      securityContext:
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]

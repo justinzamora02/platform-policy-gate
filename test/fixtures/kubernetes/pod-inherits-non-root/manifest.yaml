@@ -1,0 +1,13 @@
+# K8S-002 pass fixture: the pod sets runAsNonRoot and the container says
+# nothing, so it inherits. A rule that only reads the container's own
+# securityContext fails this valid manifest.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: inherits-non-root-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
