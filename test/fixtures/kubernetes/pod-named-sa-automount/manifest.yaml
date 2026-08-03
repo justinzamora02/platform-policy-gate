@@ -1,0 +1,27 @@
+# K8S-010 pass fixture. Same `automountServiceAccountToken: true`, but bound to
+# a named ServiceAccount — a workload that asked for an identity and can be
+# given scoped RBAC. Mounting that token is the intended way to call the API, so
+# the rule must stay silent here rather than ban automount outright.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: named-sa-automount-pod
+spec:
+  serviceAccountName: reconciler
+  automountServiceAccountToken: true
+  securityContext:
+    runAsNonRoot: true
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]

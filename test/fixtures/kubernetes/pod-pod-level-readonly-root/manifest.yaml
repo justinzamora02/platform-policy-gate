@@ -1,0 +1,28 @@
+# K8S-008 fail fixture, and the reason this rule does not inherit from the pod.
+#
+# `readOnlyRootFilesystem` is not a field of PodSecurityContext, so the value
+# below is inert: the API server discards it and the kubelet mounts `app` with a
+# writable root anyway. A rule reusing lib.inherited_security_context reads the
+# pod's `true`, clears the container, and passes a manifest whose author only
+# thinks it is hardened.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-level-readonly-root-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      securityContext:
+        capabilities:
+          drop: [ALL]
