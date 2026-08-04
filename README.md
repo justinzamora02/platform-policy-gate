@@ -80,6 +80,37 @@ jobs:
 
 Helm rendering and the aggregated job summary are not wired in yet.
 
+## Using it from another repository
+
+`.github/workflows/policy-check.yml` is a reusable workflow. It checks out the
+caller, checks out this repository at the ref the caller pins, and runs Conftest
+over the caller's rendered Kubernetes manifests and locally rendered Helm
+charts. Any `deny` fails the job.
+
+```yaml
+jobs:
+  policy:
+    uses: justinzamora02/platform-policy-gate/.github/workflows/policy-check.yml@v1
+    with:
+      manifest-paths: manifests
+      policy-ref: v1
+```
+
+| Input | Required | Default | Purpose |
+|---|---|---|---|
+| `manifest-paths` | no | `manifests` | Whitespace-separated files or directories to scan, walked recursively. No glob expansion, and no paths containing spaces. |
+| `policy-ref` | **yes** | — | Ref of this repository to evaluate against. No default, so a rule added here can never change a caller's verdict without a commit. |
+| `policy-repository` | no | `justinzamora02/platform-policy-gate` | Override to test policy changes from a fork. |
+| `fail-on-warn` | no | `false` | Also fail on `warn` findings, for rules still inside their grace period. |
+
+Helm charts are discovered by `Chart.yaml` anywhere in the caller's repository.
+Each chart is linted and rendered once for every chart-local `values*.yaml`
+file; a chart with none is rendered once with its defaults. The matrix check
+name includes the exact values path, or says that chart defaults were used, so
+a passing check cannot imply coverage beyond the committed values. A dedicated
+check reports `no charts found` when discovery is empty. The aggregated job
+summary is not wired in yet.
+
 ## Layout
 
 ```
