@@ -26,5 +26,8 @@ jobs:
             | sudo tar -xz -C /usr/local/bin conftest
 
       # Same entry point a reviewer runs locally: formatting, strict type
-      # check, `opa test`, and `conftest verify`.
-      - run: make check
+      # check, `opa test`, `conftest verify`, and the rule-coverage gate, which
+      # fails the job rather than let a rule reach master with no test that
+      # trips it.
+      - name: Format, type-check, test, rule coverage
+        run: make check

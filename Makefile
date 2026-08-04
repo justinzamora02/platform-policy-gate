@@ -16,11 +16,20 @@ test: ## Run the Rego unit tests
 fmt: ## Format Rego sources in place
 	$(OPA) fmt -w policy/
 
+# Runs the suite a second time, under --coverage, because the gate needs line
+# coverage and `make test` needs verbose output. A second `opa test` over this
+# policy set costs under a second; keeping the two targets independently
+# runnable is worth more than sharing the run.
+.PHONY: coverage
+coverage: ## Fail if any rule ID has no test that trips it
+	OPA=$(OPA) ./scripts/rule-coverage.sh
+
 .PHONY: check
-check: ## Verify formatting, type-check, and test
+check: ## Verify formatting, type-check, test, and rule coverage
 	$(OPA) fmt --fail --list policy/
 	$(OPA) check --strict policy/
 	$(MAKE) test
+	$(MAKE) coverage
 
 .PHONY: inventory
 inventory: ## Write repo-inventory.json for the policy/repo package
