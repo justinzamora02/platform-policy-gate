@@ -70,8 +70,8 @@ scripts/                         helpers used by make and by the workflow
 Fixtures are loaded by directory, not by filename: `opa test policy/ test/ data/`
 puts `test/fixtures/repo/license-missing/inventory.yaml` at
 `data.fixtures.repo["license-missing"]`. Files directly under a load root merge
-at the top, so `data/gha.yaml` lands on `data.gha` — one config document per policy
-package, keyed by the package it configures.
+at the top, so `data/gha.yaml` lands on `data.gha` — one config document per
+policy package, keyed separately from the policy namespace it configures.
 
 ## Rules
 
@@ -98,11 +98,27 @@ package, keyed by the package it configures.
 | GHA-002 | Actions appear in the `approved_actions` list in `data/gha.yaml` |
 | GHA-003 | Runner labels appear in the `approved_runners` list in `data/gha.yaml` |
 
+**Dockerfile** (`policy/dockerfile`) — evaluated against parsed Dockerfiles:
+
+| ID | Rule |
+|---|---|
+| DOCKER-001 | Base images come from registries in `data/docker.yaml` |
+| DOCKER-002 | Base images do not use `:latest` or an untagged reference |
+
+**Helm** (`policy/helm`) — evaluated against `Chart.yaml`:
+
+| ID | Rule |
+|---|---|
+| HELM-001 | At least one maintainer declared |
+| HELM-002 | Description declared |
+| HELM-003 | Version is valid semantic versioning |
+
 **Repo hygiene** (`policy/repo`):
 
 | ID | Rule |
 |---|---|
 | REPO-001 | LICENSE file present at the repository root |
+| REPO-002 | CODEOWNERS file present at the root, `.github/`, or `docs/` |
 
 Every rule emits a structured object — `msg` for the human text (Conftest
 requires it under that key), plus `id`, `severity`, `enforcement`, and
@@ -117,8 +133,8 @@ means naming it:
 conftest test --policy policy --data data/ --namespace kubernetes rendered.yaml
 ```
 
-K8S-006, GHA-002, and GHA-003 read their allowlists from `data/`, so widening one is a
-review of a YAML file, not a change to Rego:
+K8S-006, DOCKER-001, GHA-002, and GHA-003 read their allowlists from `data/`,
+so widening one is a review of a YAML file, not a change to Rego:
 
 ```sh
 conftest test --policy policy --namespace github --data data/ \
@@ -132,10 +148,10 @@ the parser (`conftest parse` any workflow to see it). Zizmor owns the deeper
 analysis: template injection, excessive permissions, artifact poisoning. This
 package does not attempt any of that.
 
-`--data data/` is not optional. K8S-006 and GHA-002 fail closed without it — an
-allowlist that never loaded approves nothing, so the check goes red rather than
-silently green. See the note on `approved_registries` under Kubernetes below for
-how that is arranged, and why it does not come for free.
+`--data data/` is not optional. K8S-006, DOCKER-001, and GHA-002 fail closed
+without it — an allowlist that never loaded approves nothing, so the check goes
+red rather than silently green. See the note on `approved_registries` under
+Kubernetes below for how that is arranged, and why it does not come for free.
 
 Repo-hygiene rules evaluate a repository inventory rather than a manifest:
 

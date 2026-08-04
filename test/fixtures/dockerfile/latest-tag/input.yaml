@@ -1,0 +1,7 @@
+# DOCKER-002 fail fixture for the explicit mutable tag form.
+- Cmd: from
+  Flags: []
+  JSON: false
+  Stage: 0
+  SubCmd: ""
+  Value: [registry.example.com/base:latest]

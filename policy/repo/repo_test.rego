@@ -21,7 +21,7 @@ test_repo_001_denies_missing_license if {
 
 test_repo_001_accepts_alternate_license_names if {
 	every name in ["LICENSE.md", "LICENSE.txt", "COPYING"] {
-		ids({"files": ["README.md", name]}) == set()
+		ids({"files": ["CODEOWNERS", "README.md", name]}) == set()
 	}
 }
 
@@ -35,6 +35,36 @@ test_repo_001_ignores_non_inventory_documents if {
 
 test_repo_001_message_is_structured if {
 	some msg in repo.deny with input as fixtures.repo["license-missing"]
+	msg.severity == "medium"
+	msg.enforcement == "deny"
+	msg.resource == "repository"
+	is_string(msg.msg)
+}
+
+# --- REPO-002 -------------------------------------------------------------
+
+test_repo_002_allows_codeowners_at_root if {
+	ids(fixtures.repo["license-present"]) == set()
+}
+
+test_repo_002_denies_missing_codeowners if {
+	ids(fixtures.repo["codeowners-missing"]) == {"REPO-002"}
+}
+
+test_repo_002_accepts_every_github_codeowners_location if {
+	every path in ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"] {
+		ids({"files": ["LICENSE", path]}) == set()
+	}
+}
+
+test_repo_002_ignores_non_inventory_documents if {
+	ids(fixtures.kubernetes["pod-compliant"]) == set()
+	ids(fixtures.github.compliant) == set()
+}
+
+test_repo_002_message_is_structured if {
+	some msg in repo.deny with input as fixtures.repo["codeowners-missing"]
+	msg.id == "REPO-002"
 	msg.severity == "medium"
 	msg.enforcement == "deny"
 	msg.resource == "repository"

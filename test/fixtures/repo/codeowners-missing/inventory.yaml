@@ -1,0 +1,7 @@
+# REPO-002 fail fixture. LICENSE is present so the verdict names only the
+# CODEOWNERS rule.
+files:
+  - .github/workflows/test.yml
+  - LICENSE
+  - Makefile
+  - README.md

@@ -1,0 +1,8 @@
+# DOCKER-001 fail fixture: tagged correctly so registry approval is its only
+# defect.
+- Cmd: from
+  Flags: []
+  JSON: false
+  Stage: 0
+  SubCmd: ""
+  Value: [quay.io/vendor/base:1.0.0]

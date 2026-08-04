@@ -44,3 +44,28 @@ has_license if {
 	some path in input.files
 	path in license_names
 }
+
+# REPO-002: CODEOWNERS must live in one of GitHub's three recognized paths.
+#
+# Repeating the inventory-shape guard is deliberate. Without it `not
+# has_codeowners` succeeds for every foreign document that lacks `files`, so a
+# chart or manifest would be reported as repository hygiene.
+deny contains msg if {
+	is_array(input.files)
+	not has_codeowners
+
+	msg := {
+		"id": "REPO-002",
+		"severity": "medium",
+		"enforcement": "deny",
+		"resource": "repository",
+		"msg": "no CODEOWNERS file at the repository root, .github/, or docs/",
+	}
+}
+
+codeowners_paths := {"CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"}
+
+has_codeowners if {
+	some path in input.files
+	path in codeowners_paths
+}

@@ -1,0 +1,6 @@
+# HELM-002 fail fixture; every other required field is valid.
+apiVersion: v2
+name: compliant-chart
+version: 1.2.3
+maintainers:
+  - name: Platform Team

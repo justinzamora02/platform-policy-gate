@@ -1,0 +1,7 @@
+# HELM-003 fail fixture; the value is present but is not semantic versioning.
+apiVersion: v2
+name: compliant-chart
+description: A chart with an invalid release version
+version: release-12
+maintainers:
+  - name: Platform Team

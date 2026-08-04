@@ -1,0 +1,8 @@
+# DOCKER-002 fail fixture for the implicit latest form. The approved registry
+# keeps DOCKER-001 out of the verdict.
+- Cmd: from
+  Flags: []
+  JSON: false
+  Stage: 0
+  SubCmd: ""
+  Value: [registry.example.com/base]
