@@ -1,6 +1,7 @@
 # K8S-002 pass fixture: the pod sets runAsNonRoot and the container says
-# nothing, so it inherits. A rule that only reads the container's own
-# securityContext fails this valid manifest.
+# nothing about it, so it inherits. A rule that only reads the container's own
+# securityContext fails this valid manifest. The container-only fields it does
+# set are there to keep it silent on K8S-008 and K8S-009.
 apiVersion: v1
 kind: Pod
 metadata:
@@ -18,3 +19,7 @@ spec:
         limits:
           cpu: 500m
           memory: 256Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]

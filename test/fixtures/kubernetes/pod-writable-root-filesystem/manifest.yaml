@@ -1,10 +1,15 @@
-# K8S-002 fail fixture: runAsNonRoot set at neither the pod nor the container
-# level. Both containers should be reported, not just the first.
+# K8S-008 fail fixture, with the two shapes the rule has to treat alike.
+#
+# `app` opts out explicitly; `init` never mentions the field. Both leave a
+# writable root filesystem, so both must be reported — a rule testing only for
+# `readOnlyRootFilesystem: false` would pass `init`.
 apiVersion: v1
 kind: Pod
 metadata:
-  name: run-as-root-pod
+  name: writable-root-filesystem-pod
 spec:
+  securityContext:
+    runAsNonRoot: true
   initContainers:
     - name: init
       image: registry.example.com/init:1.0.0
@@ -16,7 +21,6 @@ spec:
           cpu: 100m
           memory: 128Mi
       securityContext:
-        readOnlyRootFilesystem: true
         capabilities:
           drop: [ALL]
   containers:
@@ -30,6 +34,6 @@ spec:
           cpu: 500m
           memory: 256Mi
       securityContext:
-        readOnlyRootFilesystem: true
+        readOnlyRootFilesystem: false
         capabilities:
           drop: [ALL]

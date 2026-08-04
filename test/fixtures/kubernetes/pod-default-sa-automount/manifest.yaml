@@ -1,13 +1,12 @@
-# K8S-003 fail fixture. All three host namespaces are set, so the rule must
-# emit three findings rather than stopping at the first.
+# K8S-010 fail fixture. No `serviceAccountName`, so this pod runs as the
+# namespace default SA — the omission is the binding, and it is the form nearly
+# every real manifest takes.
 apiVersion: v1
 kind: Pod
 metadata:
-  name: host-namespaces-pod
+  name: default-sa-automount-pod
 spec:
-  hostNetwork: true
-  hostPID: true
-  hostIPC: true
+  automountServiceAccountToken: true
   securityContext:
     runAsNonRoot: true
   containers:

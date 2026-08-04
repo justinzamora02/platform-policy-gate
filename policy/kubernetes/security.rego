@@ -68,3 +68,51 @@ deny contains msg if {
 		),
 	)
 }
+
+# K8S-008: containers must run with a read-only root filesystem.
+#
+# Read off the container alone, deliberately not through
+# lib.inherited_security_context. `readOnlyRootFilesystem` exists on the
+# container SecurityContext and has no counterpart on PodSecurityContext, so a
+# pod-level value is inert — the kubelet never reads it. Inheriting it here
+# would clear a container whose root filesystem the cluster still mounts
+# writable, which is exactly the mistake a chart setting it one level too high
+# makes.
+deny contains msg if {
+	some container in lib.containers
+	object.get(container, ["securityContext", "readOnlyRootFilesystem"], null) != true
+
+	msg := lib.container_finding(
+		"K8S-008",
+		"medium",
+		container,
+		sprintf("container %q does not set readOnlyRootFilesystem: true", [container.name]),
+	)
+}
+
+# K8S-009: containers must drop every default capability.
+#
+# Container-only for the same reason as K8S-008, and more plainly so:
+# `capabilities` has no pod-level counterpart at all, so there is nothing to
+# inherit. The membership test is against the literal "ALL" because Kubernetes
+# matches capability names exactly — a manifest dropping "all" drops nothing,
+# and a case-insensitive check here would wave it through.
+deny contains msg if {
+	some container in lib.containers
+	not drops_all_capabilities(container)
+
+	msg := lib.container_finding(
+		"K8S-009",
+		"high",
+		container,
+		sprintf("container %q does not drop capability ALL", [container.name]),
+	)
+}
+
+# Dropping "ALL" is the whole test; capabilities added back on top are a
+# separate decision this rule does not judge. The `[]` default is what makes a
+# container with no securityContext resolve to "drops nothing" instead of
+# leaving the lookup undefined, which would make the negation above silent.
+drops_all_capabilities(container) if {
+	"ALL" in object.get(container, ["securityContext", "capabilities", "drop"], [])
+}

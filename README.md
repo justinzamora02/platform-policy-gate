@@ -44,6 +44,9 @@ package, keyed by the package it configures.
 | K8S-005 | CPU and memory requests and limits required |
 | K8S-006 | Images from registries in `data/k8s.yaml` |
 | K8S-007 | No `:latest` and no untagged images |
+| K8S-008 | `readOnlyRootFilesystem: true` on every container |
+| K8S-009 | `capabilities.drop` must include `ALL` |
+| K8S-010 | No `automountServiceAccountToken: true` on the default ServiceAccount |
 
 **GitHub Actions** (`policy/github`) — evaluated against workflow files:
 
@@ -116,7 +119,7 @@ same privileges as the rest of the pod, so a policy set that only reads
 for every other kind, which is what keeps the rules silent on the Services and
 ConfigMaps that come out of the same `helm template` run.
 
-Four things this package is deliberate about:
+Five things this package is deliberate about:
 
 - **`securityContext` inheritance.** Fields inherit pod → container, but a
   container setting `runAsNonRoot: false` under a pod that sets `true` must
@@ -139,6 +142,13 @@ Four things this package is deliberate about:
   loaded, so a run that forgot `--data data/` goes green. Comprehending over
   the same undefined reference yields an empty set, so an absent allowlist
   approves nothing and the check fails closed.
+- **Inheritance is per field, not per package.** `runAsNonRoot` (K8S-002) is a
+  field of both `PodSecurityContext` and the container's `SecurityContext`, so
+  it inherits. `readOnlyRootFilesystem` (K8S-008) and `capabilities` (K8S-009)
+  exist only on the container, so a pod-level value is inert — the API drops it
+  and the kubelet never sees it. Inheriting those two would clear a container
+  the cluster still runs writable and fully capable, so they read the container
+  alone; `test_k8s_008_does_not_inherit_from_the_pod` pins that.
 - **Traversal is tested on its own.** A traversal gap fails *open* — a kind
   that resolves to no PodSpec yields no containers and therefore no findings,
   so every rule test still passes. `lib_test.rego` asserts the reachable

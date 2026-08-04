@@ -1,10 +1,15 @@
-# K8S-002 fail fixture: runAsNonRoot set at neither the pod nor the container
-# level. Both containers should be reported, not just the first.
+# K8S-009 fail fixture, with the two shapes the rule has to treat alike.
+#
+# `app` drops a capability but not the set, which is the case a presence check
+# on `capabilities.drop` alone would pass. `init` has no capabilities block, so
+# it keeps the full default set including CAP_SETUID and CAP_NET_RAW.
 apiVersion: v1
 kind: Pod
 metadata:
-  name: run-as-root-pod
+  name: missing-capability-drop-pod
 spec:
+  securityContext:
+    runAsNonRoot: true
   initContainers:
     - name: init
       image: registry.example.com/init:1.0.0
@@ -17,8 +22,6 @@ spec:
           memory: 128Mi
       securityContext:
         readOnlyRootFilesystem: true
-        capabilities:
-          drop: [ALL]
   containers:
     - name: app
       image: registry.example.com/app:1.0.0
@@ -32,4 +35,4 @@ spec:
       securityContext:
         readOnlyRootFilesystem: true
         capabilities:
-          drop: [ALL]
+          drop: [NET_RAW]
