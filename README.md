@@ -9,11 +9,29 @@ Needs [`opa`](https://www.openpolicyagent.org/docs/latest/#running-opa) and
 (`brew install opa conftest`).
 
 ```sh
-make test    # opa test + conftest verify
-make check   # formatting + strict type check + tests (what CI runs)
+make test      # opa test + conftest verify
+make coverage  # fail if any rule has no test that trips it
+make check     # formatting + strict type check + tests + coverage (what CI runs)
 ```
 
-Both accept `OPA=` / `CONFTEST=` overrides if your binaries live elsewhere.
+All three accept `OPA=` / `CONFTEST=` overrides if your binaries live elsewhere.
+
+### Rule coverage
+
+`scripts/rule-coverage.sh` fails the build when a policy can emit a rule ID that
+no test ever trips. Grepping the IDs out of `policy/` and out of
+`policy/*_test.rego` would report full coverage forever — the ID an assertion
+names is the same string the rule defines, and a comment mentioning a rule reads
+the same as the rule. So the two sides come from two tools instead: `opa parse
+--json-include locations` for the IDs a policy can emit (an AST has no comments
+in it), and `opa test --coverage` for the ones a test actually reached. A deny
+body's `msg := ...` is only covered when the rule fired, which is the distinction
+the gate turns on.
+
+The unit is the emission site, not the ID — K8S-007 denies `:latest` and an
+untagged image from two separate rule bodies, and each needs its own test. Both
+sides are discovered at run time, so a new package is under the gate as soon as
+it is committed.
 
 ## Layout
 
