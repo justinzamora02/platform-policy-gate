@@ -25,9 +25,20 @@ jobs:
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin conftest
 
+      # `make check` runs this too, so in the passing case it runs twice — a
+      # second under a second. It is a step of its own, and it is first,
+      # because the two failures mean different things: `make check` going red
+      # means the policies are broken, this going red means the policies are
+      # fine and *this repository* violates them. Buried inside `make check`
+      # that distinction reaches a reviewer as one red X and a wall of
+      # Conftest output; named here, the job summary says which it was, and a
+      # violation stops the job before the slower checks run.
+      - name: Enforce our own policies on this repo (GHA-001-003, REPO-001-002)
+        run: make self-check
+
       # Same entry point a reviewer runs locally: formatting, strict type
-      # check, `opa test`, `conftest verify`, and the rule-coverage gate, which
+      # check, `opa test`, `conftest verify`, the rule-coverage gate — which
       # fails the job rather than let a rule reach master with no test that
-      # trips it.
+      # trips it — and the self-enforcement check above.
       - name: Format, type-check, test, rule coverage
         run: make check

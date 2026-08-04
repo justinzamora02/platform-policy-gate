@@ -24,12 +24,21 @@ fmt: ## Format Rego sources in place
 coverage: ## Fail if any rule ID has no test that trips it
 	OPA=$(OPA) ./scripts/rule-coverage.sh
 
+# Belongs in `check` rather than only in CI. The violation this catches is
+# introduced by editing a file in this repo, so the reviewer who edits it is
+# the person who should see it go red — a gate that only fires after push
+# teaches people to push and wait.
+.PHONY: self-check
+self-check: ## Evaluate this repo's own workflows and inventory against its policies
+	CONFTEST=$(CONFTEST) ./scripts/self-check.sh
+
 .PHONY: check
-check: ## Verify formatting, type-check, test, and rule coverage
+check: ## Verify formatting, type-check, test, rule coverage, and self-enforcement
 	$(OPA) fmt --fail --list policy/
 	$(OPA) check --strict policy/
 	$(MAKE) test
 	$(MAKE) coverage
+	$(MAKE) self-check
 
 .PHONY: inventory
 inventory: ## Write repo-inventory.json for the policy/repo package
