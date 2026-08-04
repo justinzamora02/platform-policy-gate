@@ -1,0 +1,3 @@
+# Every change to the policy set is an org-wide gate change, so review is
+# global rather than per-directory.
+* @justinzamora02

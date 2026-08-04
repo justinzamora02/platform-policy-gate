@@ -1,0 +1,27 @@
+# DOCKER-001/002 pass fixture, in the exact instruction shape emitted by
+# `conftest parse`. The middle FROM is a stage alias; treating it as an external
+# image would incorrectly report both an unapproved registry and a missing tag.
+- Cmd: from
+  Flags: []
+  JSON: false
+  Stage: 0
+  SubCmd: ""
+  Value: [registry.example.com/toolchain:1.22.0, AS, builder]
+- Cmd: run
+  Flags: []
+  JSON: false
+  Stage: 0
+  SubCmd: ""
+  Value: [go build ./...]
+- Cmd: from
+  Flags: []
+  JSON: false
+  Stage: 1
+  SubCmd: ""
+  Value: [builder, AS, artifacts]
+- Cmd: from
+  Flags: []
+  JSON: false
+  Stage: 2
+  SubCmd: ""
+  Value: [ghcr.io/acme/runtime:2.0.0]

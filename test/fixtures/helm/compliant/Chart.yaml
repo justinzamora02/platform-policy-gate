@@ -1,0 +1,8 @@
+# HELM-001/002/003 pass fixture.
+apiVersion: v2
+name: compliant-chart
+description: A chart with complete ownership and release metadata
+version: 1.2.3-beta.1+build.7
+maintainers:
+  - name: Platform Team
+    email: platform@example.com

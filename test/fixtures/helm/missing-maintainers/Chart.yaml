@@ -1,0 +1,5 @@
+# HELM-001 fail fixture; every other required field is valid.
+apiVersion: v2
+name: compliant-chart
+description: A chart without ownership metadata
+version: 1.2.3

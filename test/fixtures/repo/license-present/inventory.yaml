@@ -1,6 +1,7 @@
 # REPO-001 pass fixture.
 files:
   - .github/workflows/test.yml
+  - CODEOWNERS
   - LICENSE
   - Makefile
   - README.md

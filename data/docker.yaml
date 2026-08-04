@@ -1,0 +1,17 @@
+# Configuration for the policy/dockerfile package.
+#
+# This list is separate from data.k8s because build stages may pull toolchains
+# that never enter a runtime manifest. Coupling the two gates would make a
+# build-only approval silently widen the Kubernetes deployment boundary.
+#
+# Loaded as `data.docker`, not `data.dockerfile`. Keeping base data outside the
+# policy package namespace makes a future rule/key collision a compile-time
+# error instead of an order-dependent runtime conflict.
+docker:
+  # DOCKER-001: registries external FROM instructions may pull from.
+  #
+  # Docker Hub is absent deliberately. Bare references resolve there, so this
+  # omission is what makes `FROM golang:1.22` fail rather than bypass the gate.
+  approved_registries:
+    - registry.example.com
+    - ghcr.io
