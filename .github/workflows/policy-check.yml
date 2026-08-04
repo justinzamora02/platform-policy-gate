@@ -1,0 +1,141 @@
+# Reusable policy check, called by consuming repositories.
+#
+# `workflow_call` runs in the caller's context: the caller's repository is what
+# `actions/checkout` resolves to by default, and secrets/permissions are the
+# caller's. The policies, however, live here — so this workflow checks out two
+# repositories and evaluates one against the other.
+#
+# Scope today is plain Kubernetes manifests already committed as YAML. Helm
+# rendering and the aggregated summary are separate concerns and land later; a
+# caller wiring this up now gets a real pass/fail gate, not a placeholder.
+name: policy-check
+
+on:
+  workflow_call:
+    inputs:
+      manifest-paths:
+        description: >-
+          Whitespace-separated files or directories in the calling repository
+          holding rendered Kubernetes manifests. Directories are walked
+          recursively. Globs are not expanded — pass the directory instead, so
+          that a pattern matching nothing cannot be mistaken for a clean run.
+        type: string
+        required: false
+        default: manifests
+
+      policy-ref:
+        description: >-
+          Ref of platform-policy-gate to evaluate against — a tag or a full
+          commit SHA. Required with no default on purpose: policy is versioned
+          input to the caller's build, and a floating default would let a rule
+          added here turn a caller's green check red without a commit on either
+          side.
+        type: string
+        required: true
+
+      policy-repository:
+        description: >-
+          Repository holding the policies, as `owner/repo`. Overridable so a
+          fork can test policy changes against its own callers before they are
+          merged upstream.
+        type: string
+        required: false
+        default: justinzamora02/platform-policy-gate
+
+      fail-on-warn:
+        description: >-
+          Fail the job on `warn` findings as well as `deny`. Default false, so
+          that a rule introduced at `warn` gives callers a grace period before
+          it is promoted to `deny`.
+        type: boolean
+        required: false
+        default: false
+
+# The job reads two repositories and writes nothing. Declaring it here rather
+# than inheriting the caller's token scope means a caller with a broad default
+# token does not hand that scope to policy evaluation.
+permissions:
+  contents: read
+
+jobs:
+  kubernetes:
+    # Not an input. A `runs-on: ${{ inputs.runner }}` would defeat GHA-003,
+    # which approves runner labels by reading them statically out of the YAML —
+    # an expression is not a label it can check.
+    runs-on: ubuntu-latest
+    steps:
+      # Default repository/ref in a `workflow_call` is the caller's, at the
+      # commit that triggered it. `persist-credentials: false` keeps the token
+      # out of `.git/config`, where any later step — including one added to the
+      # caller's manifests directory — could read it.
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      # Second checkout under a dotted path so the policies cannot themselves
+      # be picked up as manifests when a caller points `manifest-paths` at `.`.
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
+          persist-credentials: false
+
+      # Pinned to the version `make check` and test.yml run, so a caller cannot
+      # be failed — or passed — by a Conftest release the policies were never
+      # tested against.
+      - name: Install conftest
+        env:
+          CONFTEST_VERSION: 0.68.2
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin conftest
+
+      # Inputs reach the shell through `env`, never through `${{ }}` inside the
+      # script body: a caller controls every one of these values, and inlined
+      # expansion would let `manifest-paths` close the quote and run commands on
+      # a runner holding the caller's token.
+      #
+      # Conftest exits non-zero on any `deny`, which is the gate — no explicit
+      # exit handling, because swallowing that code is how these checks quietly
+      # stop enforcing anything.
+      - name: Conftest — Kubernetes manifests
+        env:
+          MANIFEST_PATHS: ${{ inputs.manifest-paths }}
+          FAIL_ON_WARN: ${{ inputs.fail-on-warn }}
+        run: |
+          set -euo pipefail
+
+          # Word-split once, deliberately, then quote every element. Paths with
+          # spaces are unsupported for that reason and the docs say so.
+          read -ra paths <<<"$MANIFEST_PATHS"
+
+          # `--namespace kubernetes` because Conftest defaults to `main`, which
+          # holds no rules here and would report zero findings on anything.
+          #
+          # `--data .policy-gate/data` is load-bearing: K8S-006 reads its
+          # registry allowlist from there and comprehends over it, so a missing
+          # data root approves nothing rather than everything. Dropping the flag
+          # turns the check red, not green.
+          #
+          # Seeded rather than started empty so that `set -u` never sees an
+          # unset array — bash 3.2 errors on `"${empty[@]}"`, which would make
+          # this script fail differently when a reviewer runs it on macOS than
+          # it does on the runner.
+          args=(
+            --policy .policy-gate/policy
+            --data .policy-gate/data
+            --namespace kubernetes
+          )
+
+          if [ "$FAIL_ON_WARN" = "true" ]; then
+            args+=(--fail-on-warn)
+          fi
+
+          # A path that matches no files is an error from Conftest and is left
+          # to fail the job — a misconfigured `manifest-paths` reporting success
+          # is worse than one reporting failure.
+          conftest test "${args[@]}" "${paths[@]}"
