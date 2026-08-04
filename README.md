@@ -15,6 +15,30 @@ make check   # formatting + strict type check + tests (what CI runs)
 
 Both accept `OPA=` / `CONFTEST=` overrides if your binaries live elsewhere.
 
+## Using it from another repository
+
+`.github/workflows/policy-check.yml` is a reusable workflow. It checks out the
+caller, checks out this repository at the ref the caller pins, and runs Conftest
+over the caller's rendered Kubernetes manifests. Any `deny` fails the job.
+
+```yaml
+jobs:
+  policy:
+    uses: justinzamora02/platform-policy-gate/.github/workflows/policy-check.yml@v1
+    with:
+      manifest-paths: manifests
+      policy-ref: v1
+```
+
+| Input | Required | Default | Purpose |
+|---|---|---|---|
+| `manifest-paths` | no | `manifests` | Whitespace-separated files or directories to scan, walked recursively. No glob expansion, and no paths containing spaces. |
+| `policy-ref` | **yes** | — | Ref of this repository to evaluate against. No default, so a rule added here can never change a caller's verdict without a commit. |
+| `policy-repository` | no | `justinzamora02/platform-policy-gate` | Override to test policy changes from a fork. |
+| `fail-on-warn` | no | `false` | Also fail on `warn` findings, for rules still inside their grace period. |
+
+Helm rendering and the aggregated job summary are not wired in yet.
+
 ## Layout
 
 ```
