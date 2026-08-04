@@ -9,9 +9,10 @@ Needs [`opa`](https://www.openpolicyagent.org/docs/latest/#running-opa) and
 (`brew install opa conftest`).
 
 ```sh
-make test      # opa test + conftest verify
-make coverage  # fail if any rule has no test that trips it
-make check     # formatting + strict type check + tests + coverage (what CI runs)
+make test        # opa test + conftest verify
+make coverage    # fail if any rule has no test that trips it
+make self-check  # evaluate this repo's own workflows and inventory against these rules
+make check       # all of the above, plus formatting and a strict type check (what CI runs)
 ```
 
 All three accept `OPA=` / `CONFTEST=` overrides if your binaries live elsewhere.
@@ -32,6 +33,28 @@ The unit is the emission site, not the ID — K8S-007 denies `:latest` and an
 untagged image from two separate rule bodies, and each needs its own test. Both
 sides are discovered at run time, so a new package is under the gate as soon as
 it is committed.
+
+### Self-enforcement
+
+`scripts/self-check.sh` runs the published rules against this repository. The
+tests prove a rule fires correctly against a fixture; they say nothing about
+whether the repo shipping the rule obeys it. Without this, `uses:
+actions/checkout@v5` could land in `.github/workflows/` here, every fixture
+would still pass, and a repository whose whole argument is policy-as-code would
+merge an unpinned action behind a green check.
+
+It evaluates two namespaces, because the two packages read two different kinds
+of document: `github` over `.github/workflows/`, and `repo` over an inventory
+generated from the working tree by `scripts/repo-inventory.sh`. Both run before
+the script exits, so one run reports everything wrong rather than the first
+thing. The inventory goes to a temp directory — it is an artifact of the current
+tree, not a source file, and `make inventory` remains the way to write one out
+for inspection (`repo-inventory.json`, gitignored).
+
+It is part of `make check`, and also a step of its own in CI, ahead of `make
+check`. The duplicated run costs under a second and buys a distinction worth
+seeing in the job summary: `make check` red means the policies are broken, and
+self-check red means the policies are fine and *this repository* violates them.
 
 ## Using it from another repository
 
