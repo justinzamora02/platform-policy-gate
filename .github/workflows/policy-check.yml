@@ -5,9 +5,9 @@
 # caller's. The policies, however, live here — so this workflow checks out two
 # repositories and evaluates one against the other.
 #
-# Scope today is plain Kubernetes manifests already committed as YAML. Helm
-# rendering and the aggregated summary are separate concerns and land later; a
-# caller wiring this up now gets a real pass/fail gate, not a placeholder.
+# Scope today is plain Kubernetes manifests and locally rendered Helm charts.
+# The aggregated summary is a separate concern and lands later; a caller wiring
+# this up now gets real pass/fail gates, not placeholders.
 name: policy-check
 
 on:
@@ -51,13 +51,174 @@ on:
         required: false
         default: false
 
-# The job reads two repositories and writes nothing. Declaring it here rather
-# than inheriting the caller's token scope means a caller with a broad default
-# token does not hand that scope to policy evaluation.
+# The jobs read two repositories and write nothing. Declaring permissions here
+# rather than inheriting the caller's token scope means a caller with a broad
+# default token does not hand that scope to policy evaluation.
 permissions:
   contents: read
 
 jobs:
+  discover-helm:
+    name: Discover Helm charts
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.charts.outputs.matrix }}
+      has_charts: ${{ steps.charts.outputs.has_charts }}
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      # JSON construction belongs to jq: shell concatenation would make a
+      # quote or space in a caller-controlled path corrupt fromJSON below.
+      - name: Build the Helm render matrix
+        id: charts
+        run: |
+          set -euo pipefail
+
+          matrix="$(jq -cn '{include: []}')"
+
+          while IFS= read -r -d '' chart_file; do
+            chart="${chart_file%/Chart.yaml}"
+            found_values=false
+
+            while IFS= read -r -d '' values_file; do
+              found_values=true
+              matrix="$(
+                jq -c \
+                  --arg chart "$chart" \
+                  --arg values "$values_file" \
+                  --arg coverage "$values_file" \
+                  '.include += [{chart: $chart, values: $values, coverage: $coverage}]' \
+                  <<<"$matrix"
+              )"
+            done < <(find "$chart" -maxdepth 1 -type f -name 'values*.yaml' -print0)
+
+            if [ "$found_values" = "false" ]; then
+              matrix="$(
+                jq -c \
+                  --arg chart "$chart" \
+                  --arg coverage 'chart defaults (no values*.yaml found)' \
+                  '.include += [{chart: $chart, values: "", coverage: $coverage}]' \
+                  <<<"$matrix"
+              )"
+            fi
+          done < <(find . -type f -name Chart.yaml -print0)
+
+          count="$(jq '.include | length' <<<"$matrix")"
+          printf 'matrix=%s\n' "$matrix" >>"$GITHUB_OUTPUT"
+
+          if [ "$count" -eq 0 ]; then
+            printf 'has_charts=false\n' >>"$GITHUB_OUTPUT"
+          else
+            printf 'has_charts=true\n' >>"$GITHUB_OUTPUT"
+          fi
+
+  helm:
+    # Coverage belongs in the check name, not only its logs: a green check must
+    # show exactly which committed values file it proves compliant.
+    name: Helm — ${{ matrix.chart }} — ${{ matrix.coverage }}
+    needs: discover-helm
+    if: needs.discover-helm.outputs.has_charts == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover-helm.outputs.matrix) }}
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
+          persist-credentials: false
+
+      # The hosted runner's Helm version changes independently of this policy
+      # ref; pinning it keeps identical chart inputs rendering identically.
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: v3.18.4
+          token: ''
+
+      - name: Install conftest
+        env:
+          CONFTEST_VERSION: 0.68.2
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin conftest
+
+      # Matrix values reach the shell through env so a caller-controlled path
+      # cannot close a quote and execute on the runner.
+      - name: Helm lint
+        env:
+          CHART_PATH: ${{ matrix.chart }}
+          VALUES_FILE: ${{ matrix.values }}
+        run: |
+          set -euo pipefail
+
+          helm_args=("$CHART_PATH")
+          if [ -n "$VALUES_FILE" ]; then
+            # Helm parses --values as CSV even when it receives one shell
+            # argument, so quote-bearing filenames need CSV escaping too.
+            values_csv="${VALUES_FILE//\"/\"\"}"
+            helm_args+=(--values "\"$values_csv\"")
+          fi
+
+          helm lint "${helm_args[@]}"
+
+      # pipefail is load-bearing: without it a failed render could be hidden by
+      # Conftest successfully evaluating an empty stream.
+      - name: Conftest — rendered Helm chart
+        env:
+          CHART_PATH: ${{ matrix.chart }}
+          VALUES_FILE: ${{ matrix.values }}
+          VALUES_COVERAGE: ${{ matrix.coverage }}
+          FAIL_ON_WARN: ${{ inputs.fail-on-warn }}
+        run: |
+          set -euo pipefail
+
+          printf 'Values coverage: %s\n' "$VALUES_COVERAGE"
+
+          helm_args=("$CHART_PATH")
+          if [ -n "$VALUES_FILE" ]; then
+            values_csv="${VALUES_FILE//\"/\"\"}"
+            helm_args+=(--values "\"$values_csv\"")
+          fi
+
+          conftest_args=(
+            --policy .policy-gate/policy
+            --data .policy-gate/data
+            --namespace kubernetes
+          )
+
+          if [ "$FAIL_ON_WARN" = "true" ]; then
+            conftest_args+=(--fail-on-warn)
+          fi
+
+          helm template policy-check "${helm_args[@]}" \
+            | conftest test "${conftest_args[@]}" -
+
+  no-helm-charts:
+    # An explicit check prevents a repository with broken discovery or no
+    # charts from looking indistinguishable from one whose charts passed.
+    name: Helm — no charts found
+    needs: discover-helm
+    if: needs.discover-helm.outputs.has_charts == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report no charts found
+        run: |
+          set -euo pipefail
+          echo '::notice title=Helm chart discovery::no charts found'
+
   kubernetes:
     # Not an input. A `runs-on: ${{ inputs.runner }}` would defeat GHA-003,
     # which approves runner labels by reading them statically out of the YAML —

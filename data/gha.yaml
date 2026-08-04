@@ -22,6 +22,9 @@ gha:
     - actions/setup-node
     - actions/setup-python
     - actions/upload-artifact
+    # The runner image floats its Helm version; this action pins chart rendering
+    # to the version reviewed with the policy workflow.
+    - azure/setup-helm
     - docker/build-push-action
     - docker/login-action
     - docker/setup-buildx-action
