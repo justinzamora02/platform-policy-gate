@@ -1,37 +1,6 @@
 #!/usr/bin/env bash
 # Evaluate this repository's published policies against this repository.
-#
-# `make test` proves the rules fire correctly against fixtures. It says nothing
-# about whether the repo shipping those rules obeys them. Without this script
-# the gap is invisible and permanent: someone adds `uses: actions/checkout@v5`
-# to a workflow here, every fixture still passes, `conftest verify` is green,
-# and a repository whose entire thesis is policy-as-code merges an unpinned
-# action. That is the one failure this project cannot afford, so it is checked
-# by the same engine and the same rule sources that consumers get.
-#
-# Two namespaces, because the two policy packages read two different kinds of
-# document and neither can be pointed at the other's input:
-#
-#   github  the workflow YAML in .github/workflows/, read as workflows
-#   repo    an inventory document generated from the working tree, which is
-#           what policy/repo evaluates — a list of paths, not a manifest
-#
-# Three things this is deliberate about:
-#
-#   `--namespace` is mandatory. Conftest defaults to `main`, which holds no
-#   rules here, so a missing flag reports zero findings on anything and the
-#   gate reads as green. Same class of bug as the one rule-coverage.sh exists
-#   to prevent: a check that cannot go red gets quoted as evidence.
-#
-#   `--data data/` is mandatory too, and fails the other way. GHA-002 and
-#   GHA-003 comprehend over their allowlists, so an allowlist that never loaded
-#   approves nothing and the run goes red. Dropping the flag is loud, which is
-#   the correct direction for an allowlist to fail.
-#
-#   Both namespaces run before the script exits. `set -e` would stop at the
-#   first failing namespace and hide the second, so the status is accumulated
-#   instead — one run should report everything wrong with the repo, not the
-#   first thing.
+# See README § Self-enforcement for why, and for the two namespaces.
 #
 # A path matching no files is an error from Conftest and is left to fail. If
 # .github/workflows/ is ever renamed or emptied, this must go red rather than
@@ -53,8 +22,14 @@ trap 'rm -rf "$work"' EXIT
 
 ./scripts/repo-inventory.sh . >"$work/repo-inventory.json"
 
+# Accumulated rather than `set -e`: one run should report everything wrong with
+# the repo, not stop at the first failing namespace.
 status=0
 
+# `--namespace` is mandatory — Conftest defaults to `main`, which holds no rules
+# here, so omitting it reports zero findings and the gate reads green.
+# `--data data/` is mandatory the other way: GHA-002/003 comprehend over their
+# allowlists, so an allowlist that never loaded approves nothing and goes red.
 echo "self-check: github namespace over .github/workflows/"
 "$CONFTEST" test \
 	--policy policy \
