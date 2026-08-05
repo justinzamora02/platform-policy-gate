@@ -5,14 +5,18 @@
 # caller's. The policies, however, live here — so this workflow checks out two
 # repositories and evaluates one against the other.
 #
-# Scope today is plain Kubernetes manifests and locally rendered Helm charts.
+# Scope is Kubernetes manifests and locally rendered Helm charts (Conftest),
+# GitHub Actions workflows (Conftest + Zizmor), and Dockerfiles (Conftest +
+# Hadolint).
 #
-# Every Conftest invocation writes its result as JSON and uploads it as an
-# artifact rather than gating its own job on Conftest's exit code. A final
-# `aggregate` job downloads every artifact, normalizes them with
+# Every leg writes its result as JSON, normalizes it with the matching
+# scripts/normalize-*.sh into one finding shape, and uploads it as an artifact
+# — none of them gate their own job on the underlying tool's exit code. A
+# final `aggregate` job downloads every artifact, merges them with
 # scripts/aggregate-findings.sh, posts one job summary, and is the only job
 # that fails the run. That is what makes the check one legible red/green
-# signal instead of N raw Conftest dumps a reviewer has to open individually.
+# signal instead of four tools' worth of raw output a reviewer has to open
+# individually.
 name: policy-check
 
 on:
@@ -208,9 +212,10 @@ jobs:
               --data .policy-gate/data \
               --namespace kubernetes \
               --output json \
-              - >findings.json || true
+              - >raw.json || true
 
-          jq empty findings.json
+          jq empty raw.json
+          .policy-gate/scripts/normalize-conftest.sh raw.json >findings.json
 
       - name: Upload findings
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -300,14 +305,15 @@ jobs:
             --data .policy-gate/data \
             --namespace kubernetes \
             --output json \
-            "${paths[@]}" >findings.json || true
+            "${paths[@]}" >raw.json || true
 
           # A misconfigured or empty `manifest-paths` makes Conftest print an
           # error and emit no JSON at all, rather than `[]`. That is the only
           # way this step can tell "no findings" apart from "nothing was
           # evaluated" — checked explicitly, so it stays a hard failure instead
           # of being swallowed by the `|| true` above.
-          jq empty findings.json
+          jq empty raw.json
+          .policy-gate/scripts/normalize-conftest.sh raw.json >findings.json
 
       - name: Upload findings
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -316,13 +322,130 @@ jobs:
           path: findings.json
           retention-days: 1
 
+  zizmor:
+    # Zizmor covers injection, permissions, and artifact poisoning across
+    # `.github/workflows/` — the analysis GHA-001 does not attempt (see
+    # policy/github/workflow.rego). Judgment about that boundary is the point;
+    # reimplementing Zizmor's audits in Rego would not be.
+    name: Zizmor — .github/workflows/
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
+          persist-credentials: false
+
+      - name: Install Zizmor
+        env:
+          ZIZMOR_VERSION: 1.28.0
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/zizmor-x86_64-unknown-linux-gnu.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin zizmor
+
+      # `--offline` because this job carries no GitHub token (permissions are
+      # `contents: read` for the whole workflow) and a caller's check should
+      # not depend on network reachability at audit time.
+      #
+      # A workflow directory always exists in any repository with CI, so no
+      # "nothing found" branch is needed the way Helm discovery has one.
+      - name: Zizmor
+        run: |
+          set -euo pipefail
+          zizmor --offline --format json .github/workflows/ >raw.json || true
+          jq empty raw.json
+          .policy-gate/scripts/normalize-zizmor.sh raw.json >findings.json
+
+      - name: Upload findings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: findings-zizmor
+          path: findings.json
+          retention-days: 1
+
+  discover-dockerfiles:
+    name: Discover Dockerfiles
+    runs-on: ubuntu-latest
+    outputs:
+      has_dockerfiles: ${{ steps.find.outputs.has_dockerfiles }}
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Look for Dockerfiles
+        id: find
+        run: |
+          set -euo pipefail
+          if [ -n "$(find . -type f -name 'Dockerfile*' -print -quit)" ]; then
+            printf 'has_dockerfiles=true\n' >>"$GITHUB_OUTPUT"
+          else
+            printf 'has_dockerfiles=false\n' >>"$GITHUB_OUTPUT"
+          fi
+
+  hadolint:
+    # Hadolint owns every Dockerfile instruction except FROM — DOCKER-001/002
+    # in policy/dockerfile/dockerfile.rego cover the base-image registry and
+    # tag, deliberately scoped narrowly so the two tools don't issue different
+    # verdicts on the same hygiene rule.
+    name: Hadolint — Dockerfiles
+    needs: discover-dockerfiles
+    if: needs.discover-dockerfiles.outputs.has_dockerfiles == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
+          persist-credentials: false
+
+      - name: Install Hadolint
+        env:
+          HADOLINT_VERSION: 2.12.0
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" \
+            -o /usr/local/bin/hadolint
+          chmod +x /usr/local/bin/hadolint
+
+      - name: Hadolint
+        run: |
+          set -euo pipefail
+          mapfile -d '' -t dockerfiles < <(find . -type f -name 'Dockerfile*' -print0)
+          hadolint --format json "${dockerfiles[@]}" >raw.json || true
+          jq empty raw.json
+          .policy-gate/scripts/normalize-hadolint.sh raw.json >findings.json
+
+      - name: Upload findings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: findings-hadolint
+          path: findings.json
+          retention-days: 1
+
   aggregate:
     name: Aggregate findings
-    # `if: always()` because a `deny` in `kubernetes` or `helm` reports success
-    # for the job itself now (each leg's Conftest failure is swallowed with
-    # `|| true`) — but `no-helm-charts` legitimately skips when charts exist,
-    # so this still has to run when the others succeed, fail, or are skipped.
-    needs: [kubernetes, helm, no-helm-charts]
+    # `if: always()` because a `deny` in any leg reports success for the job
+    # itself now (each leg's tool failure is swallowed with `|| true`) — and
+    # `no-helm-charts`/`hadolint` legitimately skip, so this still has to run
+    # when the others succeed, fail, or are skipped.
+    needs: [kubernetes, helm, no-helm-charts, zizmor, discover-dockerfiles, hadolint]
     if: always()
     runs-on: ubuntu-latest
     steps:
