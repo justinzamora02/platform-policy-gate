@@ -6,8 +6,13 @@
 # repositories and evaluates one against the other.
 #
 # Scope today is plain Kubernetes manifests and locally rendered Helm charts.
-# The aggregated summary is a separate concern and lands later; a caller wiring
-# this up now gets real pass/fail gates, not placeholders.
+#
+# Every Conftest invocation writes its result as JSON and uploads it as an
+# artifact rather than gating its own job on Conftest's exit code. A final
+# `aggregate` job downloads every artifact, normalizes them with
+# scripts/aggregate-findings.sh, posts one job summary, and is the only job
+# that fails the run. That is what makes the check one legible red/green
+# signal instead of N raw Conftest dumps a reviewer has to open individually.
 name: policy-check
 
 on:
@@ -176,12 +181,16 @@ jobs:
 
       # pipefail is load-bearing: without it a failed render could be hidden by
       # Conftest successfully evaluating an empty stream.
+      #
+      # No `--fail-on-warn` and no reliance on Conftest's own exit code: this
+      # leg reports findings, it does not decide the run's outcome. The
+      # `aggregate` job below is the only job that gates, so `|| true` lets the
+      # artifact upload step still run when Conftest finds a `deny`.
       - name: Conftest — rendered Helm chart
         env:
           CHART_PATH: ${{ matrix.chart }}
           VALUES_FILE: ${{ matrix.values }}
           VALUES_COVERAGE: ${{ matrix.coverage }}
-          FAIL_ON_WARN: ${{ inputs.fail-on-warn }}
         run: |
           set -euo pipefail
 
@@ -193,18 +202,22 @@ jobs:
             helm_args+=(--values "\"$values_csv\"")
           fi
 
-          conftest_args=(
-            --policy .policy-gate/policy
-            --data .policy-gate/data
-            --namespace kubernetes
-          )
-
-          if [ "$FAIL_ON_WARN" = "true" ]; then
-            conftest_args+=(--fail-on-warn)
-          fi
-
           helm template policy-check "${helm_args[@]}" \
-            | conftest test "${conftest_args[@]}" -
+            | conftest test \
+              --policy .policy-gate/policy \
+              --data .policy-gate/data \
+              --namespace kubernetes \
+              --output json \
+              - >findings.json || true
+
+          jq empty findings.json
+
+      - name: Upload findings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: findings-helm-${{ strategy.job-index }}
+          path: findings.json
+          retention-days: 1
 
   no-helm-charts:
     # An explicit check prevents a repository with broken discovery or no
@@ -260,13 +273,14 @@ jobs:
       # expansion would let `manifest-paths` close the quote and run commands on
       # a runner holding the caller's token.
       #
-      # Conftest exits non-zero on any `deny`, which is the gate — no explicit
-      # exit handling, because swallowing that code is how these checks quietly
-      # stop enforcing anything.
+      # This leg reports findings; it does not gate. The `aggregate` job below
+      # is the only job that fails the run, so `|| true` lets the artifact
+      # upload step run even when Conftest finds a `deny`. A path that matches
+      # no files is still a hard failure here — that is a misconfiguration, not
+      # a finding, and belongs to this job, not the aggregator.
       - name: Conftest — Kubernetes manifests
         env:
           MANIFEST_PATHS: ${{ inputs.manifest-paths }}
-          FAIL_ON_WARN: ${{ inputs.fail-on-warn }}
         run: |
           set -euo pipefail
 
@@ -281,22 +295,62 @@ jobs:
           # registry allowlist from there and comprehends over it, so a missing
           # data root approves nothing rather than everything. Dropping the flag
           # turns the check red, not green.
-          #
-          # Seeded rather than started empty so that `set -u` never sees an
-          # unset array — bash 3.2 errors on `"${empty[@]}"`, which would make
-          # this script fail differently when a reviewer runs it on macOS than
-          # it does on the runner.
-          args=(
-            --policy .policy-gate/policy
-            --data .policy-gate/data
-            --namespace kubernetes
-          )
+          conftest test \
+            --policy .policy-gate/policy \
+            --data .policy-gate/data \
+            --namespace kubernetes \
+            --output json \
+            "${paths[@]}" >findings.json || true
 
-          if [ "$FAIL_ON_WARN" = "true" ]; then
-            args+=(--fail-on-warn)
-          fi
+          # A misconfigured or empty `manifest-paths` makes Conftest print an
+          # error and emit no JSON at all, rather than `[]`. That is the only
+          # way this step can tell "no findings" apart from "nothing was
+          # evaluated" — checked explicitly, so it stays a hard failure instead
+          # of being swallowed by the `|| true` above.
+          jq empty findings.json
 
-          # A path that matches no files is an error from Conftest and is left
-          # to fail the job — a misconfigured `manifest-paths` reporting success
-          # is worse than one reporting failure.
-          conftest test "${args[@]}" "${paths[@]}"
+      - name: Upload findings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: findings-kubernetes
+          path: findings.json
+          retention-days: 1
+
+  aggregate:
+    name: Aggregate findings
+    # `if: always()` because a `deny` in `kubernetes` or `helm` reports success
+    # for the job itself now (each leg's Conftest failure is swallowed with
+    # `|| true`) — but `no-helm-charts` legitimately skips when charts exist,
+    # so this still has to run when the others succeed, fail, or are skipped.
+    needs: [kubernetes, helm, no-helm-charts]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      # Only for scripts/aggregate-findings.sh — findings themselves come from
+      # the artifacts below, not from this checkout.
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          persist-credentials: false
+
+      # `if-no-files-found: ignore` on download would silently produce zero
+      # files for a job that never ran (e.g. `helm` when there are no charts);
+      # the default `warn` is fine since `no-helm-charts` covers that case
+      # explicitly and this step doesn't fail either way.
+      - name: Download findings
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: findings-*
+          path: findings
+          merge-multiple: false
+
+      - name: Render summary and gate on deny findings
+        env:
+          FAIL_ON_WARN: ${{ inputs.fail-on-warn }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(findings/*/findings.json)
+          ./scripts/aggregate-findings.sh "${files[@]}"
