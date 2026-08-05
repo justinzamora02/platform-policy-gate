@@ -29,6 +29,11 @@ gha:
     - docker/login-action
     - docker/setup-buildx-action
     - hadolint/hadolint-action
+    # The gate itself. A caller's workflow references the reusable workflow at
+    # `<owner>/<repo>/.github/workflows/policy-check.yml@<sha>`, which GHA-002
+    # matches on `owner/repo` like any other subpath action — so without this
+    # entry the gate denies the usage its own README documents.
+    - justinzamora02/platform-policy-gate
     - open-policy-agent/setup-opa
 
   # GHA-003: permitted runner labels. Every label in a job's `runs-on` must

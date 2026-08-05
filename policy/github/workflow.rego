@@ -111,11 +111,21 @@ deny contains msg if {
 		"enforcement": "deny",
 		"resource": ref.resource,
 		"action": ref.uses,
-		"msg": sprintf("action %q is not in the approved_actions list in data/gha.yaml", [ref.uses]),
+		"msg": sprintf("action %q is not in the approved_actions list in data/gha.yaml", [allowlist_key(ref.uses)]),
 	}
 }
 
 approved_action(uses) if parsed(uses).action in data.gha.approved_actions
+
+# The message names the string a reviewer would add to data/gha.yaml, which is
+# `owner/repo` — not the subpath-and-ref form the workflow wrote. Kept out of
+# the rule body on purpose: `parsed()` is undefined for a reference with no ref
+# at all, and a rule body that depended on it would stop denying exactly the
+# references that cannot be vouched for. So this is total, and a reference it
+# cannot split names itself.
+allowlist_key(uses) := p.action if p := parsed(uses)
+
+allowlist_key(uses) := uses if not parsed(uses)
 
 # GHA-003: every runner label must be approved. Checking each label rather than
 # the whole `runs-on` value stops a self-hosted runner from riding along as an
