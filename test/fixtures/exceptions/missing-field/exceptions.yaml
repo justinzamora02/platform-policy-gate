@@ -1,0 +1,6 @@
+# Missing "ticket".
+exceptions:
+  - id: K8S-006
+    owner: platform-team
+    reason: registry migration in progress
+    expires: "2099-12-31"

@@ -1,0 +1,6 @@
+exceptions:
+  - id: K8S-006
+    owner: platform-team
+    ticket: JIRA-123
+    reason: registry migration in progress
+    expires: "12/31/2099"

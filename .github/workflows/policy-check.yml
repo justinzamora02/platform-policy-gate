@@ -60,6 +60,17 @@ on:
         required: false
         default: false
 
+      exceptions-file:
+        description: >-
+          Path in the calling repository to a policy-exceptions file. Its
+          shape and expiry are validated by policy/exceptions — a missing or
+          malformed field, a wildcard rule ID, or an expired entry all fail
+          closed as `deny` findings rather than being silently ignored. A file
+          that does not exist suppresses nothing; it is not an error.
+        type: string
+        required: false
+        default: .platform-policy-exceptions.yaml
+
 # The jobs read two repositories and write nothing. Declaring permissions here
 # rather than inheriting the caller's token scope means a caller with a broad
 # default token does not hand that scope to policy evaluation.
@@ -439,24 +450,90 @@ jobs:
           path: findings.json
           retention-days: 1
 
+  exceptions:
+    # A missing exceptions file is not an error — most consumers have none.
+    # A present-but-invalid one is: shape and expiry are validated here so
+    # that a malformed or expired entry surfaces as a `deny` in the same
+    # summary as everything else, instead of failing silently at suppression
+    # time in the `aggregate` job below.
+    name: Validate policy exceptions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
+          persist-credentials: false
+
+      - name: Install conftest
+        env:
+          CONFTEST_VERSION: 0.68.2
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin conftest
+
+      - name: Conftest — policy exceptions
+        env:
+          EXCEPTIONS_FILE: ${{ inputs.exceptions-file }}
+        run: |
+          set -euo pipefail
+          if [ -f "$EXCEPTIONS_FILE" ]; then
+            conftest test \
+              --policy .policy-gate/policy \
+              --data .policy-gate/data \
+              --namespace exceptions \
+              --output json \
+              "$EXCEPTIONS_FILE" >raw.json || true
+          else
+            echo '[]' >raw.json
+          fi
+          jq empty raw.json
+          .policy-gate/scripts/normalize-conftest.sh raw.json >findings.json
+
+      - name: Upload findings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: findings-exceptions
+          path: findings.json
+          retention-days: 1
+
   aggregate:
     name: Aggregate findings
     # `if: always()` because a `deny` in any leg reports success for the job
     # itself now (each leg's tool failure is swallowed with `|| true`) — and
     # `no-helm-charts`/`hadolint` legitimately skip, so this still has to run
     # when the others succeed, fail, or are skipped.
-    needs: [kubernetes, helm, no-helm-charts, zizmor, discover-dockerfiles, hadolint]
+    needs: [kubernetes, helm, no-helm-charts, zizmor, discover-dockerfiles, hadolint, exceptions]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      # Only for scripts/aggregate-findings.sh — findings themselves come from
-      # the artifacts below, not from this checkout.
+      # Needed to apply the calling repository's exceptions file, at the same
+      # path the `exceptions` job validated.
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      # For scripts/aggregate-findings.sh and scripts/apply-exceptions.sh.
       - name: Check out the policies
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
           repository: ${{ inputs.policy-repository }}
           ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
           persist-credentials: false
+
+      - uses: open-policy-agent/setup-opa@b2b258e089860efaadaaf71bf6e3aecb4a3eeff1 # v2.4.0
+        with:
+          version: 1.18.2
 
       # `if-no-files-found: ignore` on download would silently produce zero
       # files for a job that never ran (e.g. `helm` when there are no charts);
@@ -468,6 +545,25 @@ jobs:
           pattern: findings-*
           path: findings
           merge-multiple: false
+
+      # Suppression only ever applies to findings from the policy engines —
+      # never to the `exceptions` leg's own EXC-* findings. Otherwise an
+      # exceptions file could suppress the very validation that would have
+      # failed it closed.
+      - name: Apply exceptions
+        env:
+          EXCEPTIONS_FILE: ${{ inputs.exceptions-file }}
+        run: |
+          set -euo pipefail
+          for dir in findings/*/; do
+            name="$(basename "$dir")"
+            if [ "$name" = "findings-exceptions" ]; then
+              continue
+            fi
+            .policy-gate/scripts/apply-exceptions.sh "$EXCEPTIONS_FILE" "$dir/findings.json" \
+              >"$dir/findings.json.suppressed"
+            mv "$dir/findings.json.suppressed" "$dir/findings.json"
+          done
 
       - name: Render summary and gate on deny findings
         env:
