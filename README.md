@@ -72,10 +72,10 @@ individually. Any `deny` fails it.
 ```yaml
 jobs:
   policy:
-    uses: justinzamora02/platform-policy-gate/.github/workflows/policy-check.yml@v1
+    uses: justinzamora02/platform-policy-gate/.github/workflows/policy-check.yml@c215e7e59ff45a3143b7e42e955c3c10046ef9a5 # master — no v1 tag published yet
     with:
       manifest-paths: manifests
-      policy-ref: v1
+      policy-ref: c215e7e59ff45a3143b7e42e955c3c10046ef9a5 # master — no v1 tag published yet
 ```
 
 | Input | Required | Default | Purpose |

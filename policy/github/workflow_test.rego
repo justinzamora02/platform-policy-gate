@@ -49,6 +49,15 @@ test_gha_002_matches_subpath_actions_on_owner_repo if {
 	ids(workflow) == set()
 }
 
+test_gha_002_names_the_allowlist_key_rather_than_the_raw_uses if {
+	# A subpath reference, so the allowlist key and the raw `uses` differ: the
+	# finding has to name the string that goes in data/gha.yaml.
+	workflow := workflow_with_step({"uses": "some-vendor/deploy-action/setup@1b21df8e4b40e0b8b6c8c0c9f4d0e6a5c3b2a190"})
+	some msg in github.deny with input as workflow
+	msg.id == "GHA-002"
+	msg.msg == `action "some-vendor/deploy-action" is not in the approved_actions list in data/gha.yaml`
+}
+
 test_gha_002_denies_references_it_cannot_parse if {
 	# No ref at all, so there is nothing to check against the allowlist.
 	# Fails closed rather than falling through as approved.
