@@ -3,11 +3,6 @@
 # shape: {id, severity, enforcement, file, resource, msg}.
 #
 # Usage: normalize-hadolint.sh <hadolint-json-file>
-#
-# Hadolint owns every Dockerfile instruction except FROM, which
-# policy/dockerfile/dockerfile.rego covers directly (DOCKER-001/002) — see the
-# comment there. This script is what lets Hadolint's findings land in the same
-# summary as the Rego's, not a second, differently-shaped report.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -15,9 +10,8 @@ if [[ $# -ne 1 ]]; then
 	exit 2
 fi
 
-# Hadolint's own levels are error/warning/info/style. error/warning deny —
-# they are the levels Hadolint itself treats as build hygiene problems, not
-# style opinions — info/style are surfaced but don't block a run on their own.
+# Hadolint levels are error/warning/info/style. error and warning are the ones
+# Hadolint treats as hygiene problems rather than style, so those deny.
 jq -c '
 	map({
 		id: .code,

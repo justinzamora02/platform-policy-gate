@@ -4,11 +4,8 @@
 #
 # Usage: normalize-conftest.sh <conftest-json-file>...
 #
-# Conftest nests the structured fields this project's Rego emits under
-# `.metadata`, and the text a rule composed with `sprintf` under `.msg` on the
-# `failures`/`warnings` entry. Pulling both back onto one object is what lets
-# scripts/aggregate-findings.sh treat Conftest, Zizmor, and Hadolint findings
-# identically.
+# Conftest splits a finding across `.metadata` (the structured fields) and
+# `.msg` on the `failures`/`warnings` entry; this pulls both onto one object.
 set -euo pipefail
 
 if [[ $# -eq 0 ]]; then

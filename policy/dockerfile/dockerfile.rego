@@ -1,15 +1,11 @@
-# Dockerfile base-image policies.
-#
-# Conftest's Dockerfile parser hands the package one array of instructions per
-# file. Hadolint owns every instruction except FROM; keeping that boundary here
-# avoids two tools issuing different verdicts for the same hygiene rule.
+# Dockerfile base-image policies. Conftest's parser hands the package one array
+# of instructions per file. Hadolint owns every instruction except FROM.
 package dockerfile
 
 import rego.v1
 
-# A parsed Dockerfile always contains a FROM instruction with a numeric stage.
-# Requiring that shape keeps the package silent when Conftest evaluates it
-# against manifests, charts, workflows, and repository inventories.
+# A parsed Dockerfile always contains a FROM instruction with a numeric stage,
+# which is what keeps the package silent on every other kind of document.
 is_dockerfile if {
 	is_array(input)
 	some instruction in input
@@ -18,9 +14,8 @@ is_dockerfile if {
 	is_number(instruction.Stage)
 }
 
-# Stage aliases are local references, not images. Resolving the complete alias
-# set before checking FROM values prevents `FROM builder` in a multi-stage build
-# from being mistaken for an untagged Docker Hub image.
+# Stage aliases are local references, not images. Resolved before checking FROM
+# values, or `FROM builder` reads as an untagged Docker Hub image.
 stage_aliases := {lower(alias) |
 	some instruction in input
 	instruction.Cmd == "from"
@@ -37,9 +32,8 @@ external_stages contains stage if {
 	stage := {"image": image, "number": instruction.Stage}
 }
 
-# The first component is a registry only when it looks like a host. Without
-# this distinction `golang:1.22` reads as a registry named `golang:1.22` and
-# `team/image:1.0` as one named `team`, though both resolve to docker.io.
+# The first component is a registry only when it looks like a host, or
+# `golang:1.22` reads as a registry named `golang:1.22`.
 image_registry(image) := registry if {
 	parts := split(image, "/")
 	count(parts) > 1
@@ -53,8 +47,8 @@ registry_host(candidate) if contains(candidate, ":")
 
 registry_host(candidate) if candidate == "localhost"
 
-# Reading only the last path component prevents a registry port from becoming
-# a tag, while the digest guard keeps `sha256:...` from doing the same.
+# Reading only the last path component keeps a registry port from becoming a
+# tag; the digest guard keeps `sha256:...` from doing the same.
 image_tag(image) := tag if {
 	not contains(image, "@")
 	parts := split(image, "/")
@@ -65,9 +59,8 @@ image_digest(image) := digest if {
 	[_, digest] := split(image, "@")
 }
 
-# This comprehension fails closed when data/docker.yaml was not loaded. A
-# direct negative membership test against an undefined data path makes every
-# image pass, turning a missing `--data data/` flag into a green policy run.
+# The comprehension fails closed when data/docker.yaml was not loaded, where a
+# direct negative membership test would pass every image.
 approved_registries := {registry | some registry in data.docker.approved_registries}
 
 finding(id, severity, stage, message) := {
@@ -105,8 +98,8 @@ deny contains msg if {
 	)
 }
 
-# An image with neither tag nor digest resolves to `latest`; a digest is
-# accepted because it is the immutable reference form this rule is seeking.
+# DOCKER-002: an image with neither tag nor digest resolves to `latest`. A
+# digest is accepted as the immutable form.
 deny contains msg if {
 	some stage in external_stages
 	not image_tag(stage.image)

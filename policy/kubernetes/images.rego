@@ -4,15 +4,9 @@ package kubernetes
 import data.kubernetes.lib
 import rego.v1
 
-# The allowlist K8S-006 checks against, read from
-# data/k8s.yaml. Adding a registry is a data change and touches
-# no Rego.
-#
-# The comprehension is load-bearing, not just a list-to-set conversion. Testing
-# `not registry in data.k8s.approved_registries` directly passes every image when
-# that data was never loaded — a run that forgot `--data data/` goes green
-# instead of red. Comprehending over the same undefined reference yields an
-# empty set, so an absent allowlist approves nothing and the check fails closed.
+# The allowlist K8S-006 checks against, from data/k8s.yaml. The comprehension is
+# load-bearing: a direct `not registry in data...` test passes every image when
+# that data never loaded, where an empty set approves nothing.
 approved_registries := {registry | some registry in data.k8s.approved_registries}
 
 # K8S-006: images must come from an approved registry.
@@ -43,8 +37,7 @@ deny contains msg if {
 }
 
 # K8S-007: an image with neither tag nor digest resolves to `latest` at pull
-# time, so it is the same defect in different syntax and carries the same ID. A
-# digest pin is the one immutable form and is accepted in place of a tag.
+# time — the same defect in different syntax. A digest is accepted as a pin.
 deny contains msg if {
 	some container in lib.containers
 	container.image

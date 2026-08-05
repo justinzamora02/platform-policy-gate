@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
 # Merge already-normalized finding files into one job summary and gate.
 #
-# Each source — Conftest, Zizmor, Hadolint — has its own
-# scripts/normalize-*.sh that maps its native output to this project's finding
-# shape: {id, severity, enforcement, file, resource, msg}. This script only
-# merges those already-normalized arrays; keeping the per-source mapping out
-# of it is what let Zizmor and Hadolint join the summary without touching this
-# file's merge/render/gate logic.
-#
 # Usage: aggregate-findings.sh <normalized-findings-json-file>...
 #
-# A file that holds `[]` is valid input and contributes no findings.
+# Each source has its own scripts/normalize-*.sh that maps its native output to
+# {id, severity, enforcement, file, resource, msg}; this script only merges the
+# results, so a new source never touches the merge/render/gate logic. A file
+# holding `[]` is valid input and contributes no findings.
 set -euo pipefail
 
 if [[ $# -eq 0 ]]; then
@@ -52,8 +48,7 @@ summary="$(
 	if [[ "$deny_count" -eq 0 && "$warn_count" -eq 0 ]]; then
 		printf 'No findings.\n'
 	else
-		# Deny before warn: a reviewer scrolling a long summary hits the
-		# blocking findings first, not after paging past everything advisory.
+		# Deny before warn, so a long summary leads with what blocks the run.
 		render_group "deny" "Deny"
 		render_group "warn" "Warn"
 	fi
@@ -65,11 +60,9 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
 	printf '%s\n' "$summary" >>"$GITHUB_STEP_SUMMARY"
 fi
 
-# The gate: any `deny` finding fails the run, regardless of which matrix leg
-# or tool produced it. `warn` findings are surfaced but never fail on their
-# own unless the caller opted into FAIL_ON_WARN — the same grace-period switch
-# `policy-check.yml` exposes as `fail-on-warn`, now enforced here instead of
-# per-leg, since this script is the one place that sees every finding.
+# The gate: any `deny` fails the run, whichever leg or tool produced it. `warn`
+# only fails under FAIL_ON_WARN (`fail-on-warn` in policy-check.yml). Enforced
+# here rather than per-leg, since this is the one place that sees every finding.
 if [[ "$deny_count" -gt 0 ]]; then
 	exit 1
 fi

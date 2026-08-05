@@ -1,30 +1,13 @@
-# Repo hygiene policies.
-#
-# Input is a repository inventory document, not a manifest:
-#
-#   files:
-#     - LICENSE
-#     - README.md
-#     - CODEOWNERS
-#
-# `make inventory` (and the reusable workflow) generates it from the
-# consumer's working tree. Evaluating a list of paths keeps "is this file
-# present?" rules out of the manifest policies, which only ever see one
-# rendered document at a time.
-#
-# Rules emit an object rather than a bare string. Conftest requires the human
-# text under `msg` and surfaces every other key under `metadata`, which is what
-# the aggregation step consumes.
+# Repo hygiene policies. Input is a `{"files": [...]}` inventory document,
+# generated from the consumer's working tree by scripts/repo-inventory.sh, not a
+# manifest.
 package repo
 
 import rego.v1
 
-# REPO-001: a LICENSE file must be present at the repository root.
-#
-# The `files` check scopes the rule to inventory documents, the way
-# kubernetes.lib.pod_spec scopes the manifest rules. Without it the absent key
-# makes `not has_license` true, so every workflow and rendered manifest conftest
-# is pointed at reports a missing LICENSE.
+# REPO-001: a LICENSE file must be present at the repository root. The `files`
+# guard scopes the rule to inventory documents; without it the absent key makes
+# `not has_license` true for every manifest Conftest is pointed at.
 deny contains msg if {
 	is_array(input.files)
 	not has_license
@@ -46,10 +29,7 @@ has_license if {
 }
 
 # REPO-002: CODEOWNERS must live in one of GitHub's three recognized paths.
-#
-# Repeating the inventory-shape guard is deliberate. Without it `not
-# has_codeowners` succeeds for every foreign document that lacks `files`, so a
-# chart or manifest would be reported as repository hygiene.
+# Repeating the inventory-shape guard is deliberate, for the reason above.
 deny contains msg if {
 	is_array(input.files)
 	not has_codeowners

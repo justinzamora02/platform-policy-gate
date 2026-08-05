@@ -4,10 +4,9 @@
 #
 # Usage: apply-exceptions.sh <exceptions-yaml-file> <normalized-findings-json-file>
 #
-# Only policy/exceptions/exceptions.rego decides which entries are usable
-# (`data.exceptions.active`) — this script never re-derives that judgment, so
-# an invalid or expired entry that fails closed in the Rego cannot still
-# suppress a finding here.
+# `data.exceptions.active` is the only source of which entries are usable; this
+# script never re-derives that, so an entry that failed closed in the Rego
+# cannot still suppress a finding here.
 set -euo pipefail
 
 OPA="${OPA:-opa}"
@@ -20,8 +19,7 @@ fi
 exceptions_file="$1"
 findings_file="$2"
 
-# No exceptions file is the common case (most consumers have none) and is not
-# an error: every finding passes through unsuppressed.
+# No exceptions file is the common case, not an error: nothing is suppressed.
 if [[ ! -f "$exceptions_file" ]]; then
 	cat "$findings_file"
 	exit 0
