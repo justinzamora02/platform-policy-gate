@@ -59,8 +59,15 @@ self-check red means the policies are fine and *this repository* violates them.
 ## Using it from another repository
 
 `.github/workflows/policy-check.yml` is a reusable workflow. It checks out the
-caller, checks out this repository at the ref the caller pins, and runs Conftest
-over the caller's rendered Kubernetes manifests. Any `deny` fails the job.
+caller, checks out this repository at the ref the caller pins, and evaluates the
+caller's Kubernetes manifests and locally rendered Helm charts (Conftest),
+workflows (Conftest + [Zizmor](https://docs.zizmor.sh/)), and Dockerfiles
+(Conftest + [Hadolint](https://github.com/hadolint/hadolint)).
+
+Every leg writes its findings as an artifact and gates on nothing. A final
+`aggregate` job merges them into one job summary and is the only job that fails
+the run — one red/green signal instead of four tools' output to open
+individually. Any `deny` fails it.
 
 ```yaml
 jobs:
@@ -77,39 +84,36 @@ jobs:
 | `policy-ref` | **yes** | — | Ref of this repository to evaluate against. No default, so a rule added here can never change a caller's verdict without a commit. |
 | `policy-repository` | no | `justinzamora02/platform-policy-gate` | Override to test policy changes from a fork. |
 | `fail-on-warn` | no | `false` | Also fail on `warn` findings, for rules still inside their grace period. |
-
-Helm rendering and the aggregated job summary are not wired in yet.
-
-## Using it from another repository
-
-`.github/workflows/policy-check.yml` is a reusable workflow. It checks out the
-caller, checks out this repository at the ref the caller pins, and runs Conftest
-over the caller's rendered Kubernetes manifests and locally rendered Helm
-charts. Any `deny` fails the job.
-
-```yaml
-jobs:
-  policy:
-    uses: justinzamora02/platform-policy-gate/.github/workflows/policy-check.yml@v1
-    with:
-      manifest-paths: manifests
-      policy-ref: v1
-```
-
-| Input | Required | Default | Purpose |
-|---|---|---|---|
-| `manifest-paths` | no | `manifests` | Whitespace-separated files or directories to scan, walked recursively. No glob expansion, and no paths containing spaces. |
-| `policy-ref` | **yes** | — | Ref of this repository to evaluate against. No default, so a rule added here can never change a caller's verdict without a commit. |
-| `policy-repository` | no | `justinzamora02/platform-policy-gate` | Override to test policy changes from a fork. |
-| `fail-on-warn` | no | `false` | Also fail on `warn` findings, for rules still inside their grace period. |
+| `exceptions-file` | no | `.platform-policy-exceptions.yaml` | Path to a policy-exceptions file. Absent suppresses nothing and is not an error; present-but-invalid fails closed as `deny`. |
 
 Helm charts are discovered by `Chart.yaml` anywhere in the caller's repository.
 Each chart is linted and rendered once for every chart-local `values*.yaml`
 file; a chart with none is rendered once with its defaults. The matrix check
 name includes the exact values path, or says that chart defaults were used, so
 a passing check cannot imply coverage beyond the committed values. A dedicated
-check reports `no charts found` when discovery is empty. The aggregated job
-summary is not wired in yet.
+check reports `no charts found` when discovery is empty.
+
+### Exceptions
+
+An entry in the exceptions file suppresses matching findings until it expires:
+
+```yaml
+exceptions:
+  - id: K8S-006
+    resource: Deployment/legacy-app   # optional; absent suppresses every K8S-006
+    owner: platform-team
+    ticket: JIRA-123
+    reason: registry migration in progress
+    expires: 2026-12-31
+```
+
+`policy/exceptions` validates shape and expiry, and is the only thing that
+decides which entries are usable — `scripts/apply-exceptions.sh` never
+re-derives that, so an entry that fails closed there cannot still suppress a
+finding. A missing field, a wildcard `id`, an unparseable date, or a past
+`expires` each disqualify the entry *and* emit their own `deny`, so a lapsed
+exception blocks the run rather than quietly ceasing to suppress. Exceptions
+never apply to the `EXC-*` findings themselves.
 
 ## Layout
 
@@ -173,6 +177,15 @@ policy package, keyed separately from the policy namespace it configures.
 |---|---|
 | REPO-001 | LICENSE file present at the repository root |
 | REPO-002 | CODEOWNERS file present at the root, `.github/`, or `docs/` |
+
+**Exceptions** (`policy/exceptions`) — evaluated against the exceptions file:
+
+| ID | Rule |
+|---|---|
+| EXC-001 | `id`, `owner`, `ticket`, `reason`, and `expires` all present |
+| EXC-002 | `id` names one rule, not a wildcard |
+| EXC-003 | `expires` is a `YYYY-MM-DD` date |
+| EXC-004 | `expires` is in the future |
 
 Every rule emits a structured object — `msg` for the human text (Conftest
 requires it under that key), plus `id`, `severity`, `enforcement`, and
