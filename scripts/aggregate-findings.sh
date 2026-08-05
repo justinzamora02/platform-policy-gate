@@ -1,44 +1,24 @@
 #!/usr/bin/env bash
-# Normalize Conftest JSON results into one finding shape and render a single
-# job summary, instead of a reviewer reading raw `conftest test` output once
-# per matrix leg.
+# Merge already-normalized finding files into one job summary and gate.
 #
-# Each matrix leg writes its own `conftest test -o json` result to a file;
-# this script is the one place that reads all of them and decides the run's
-# outcome, so a caller sees one summary and one exit code, not N.
+# Each source — Conftest, Zizmor, Hadolint — has its own
+# scripts/normalize-*.sh that maps its native output to this project's finding
+# shape: {id, severity, enforcement, file, resource, msg}. This script only
+# merges those already-normalized arrays; keeping the per-source mapping out
+# of it is what let Zizmor and Hadolint join the summary without touching this
+# file's merge/render/gate logic.
 #
-# Usage: aggregate-findings.sh <conftest-json-file>...
+# Usage: aggregate-findings.sh <normalized-findings-json-file>...
 #
-# A file that holds `[]` (no documents evaluated, e.g. "no charts found") is
-# valid input and contributes no findings.
+# A file that holds `[]` is valid input and contributes no findings.
 set -euo pipefail
 
 if [[ $# -eq 0 ]]; then
-	echo "usage: aggregate-findings.sh <conftest-json-file>..." >&2
+	echo "usage: aggregate-findings.sh <normalized-findings-json-file>..." >&2
 	exit 2
 fi
 
-# jq flattens every file's [{filename, failures[], warnings[]}, ...] into one
-# array of {id, severity, enforcement, file, resource, msg}. Conftest puts the
-# structured fields this project's Rego emits under `.metadata`, and the text
-# a rule composed with `sprintf` under `.msg` — pulling both back together here
-# is what makes the two `deny`/`warn` arrays into one finding shape.
-findings_json="$(
-	jq -cs '
-		[
-			.[][] as $file |
-			($file.failures // [])[] as $f | {enforcement: "deny", finding: $f, filename: $file.filename},
-			($file.warnings // [])[] as $w | {enforcement: "warn", finding: $w, filename: $file.filename}
-		] | map({
-			id: (.finding.metadata.id // "UNKNOWN"),
-			severity: (.finding.metadata.severity // "unknown"),
-			enforcement,
-			file: .filename,
-			resource: (.finding.metadata.resource // ""),
-			msg: .finding.msg
-		})
-	' "$@"
-)"
+findings_json="$(jq -cs 'add' "$@")"
 
 severity_rank='{"high": 0, "medium": 1, "low": 2}'
 
