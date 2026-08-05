@@ -1,0 +1,6 @@
+exceptions:
+  - id: "K8S-*"
+    owner: platform-team
+    ticket: JIRA-123
+    reason: blanket suppression
+    expires: "2099-12-31"

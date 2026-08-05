@@ -1,0 +1,8 @@
+# One well-formed, unexpired exception.
+exceptions:
+  - id: K8S-006
+    resource: Deployment/legacy-app
+    owner: platform-team
+    ticket: JIRA-123
+    reason: registry migration in progress
+    expires: "2099-12-31"
