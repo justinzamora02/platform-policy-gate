@@ -1,22 +1,10 @@
-# Reusable policy check, called by consuming repositories.
+# Reusable policy check, called by consuming repositories. `workflow_call` runs
+# in the caller's context, so this checks out two repositories and evaluates one
+# against the other.
 #
-# `workflow_call` runs in the caller's context: the caller's repository is what
-# `actions/checkout` resolves to by default, and secrets/permissions are the
-# caller's. The policies, however, live here — so this workflow checks out two
-# repositories and evaluates one against the other.
-#
-# Scope is Kubernetes manifests and locally rendered Helm charts (Conftest),
-# GitHub Actions workflows (Conftest + Zizmor), and Dockerfiles (Conftest +
-# Hadolint).
-#
-# Every leg writes its result as JSON, normalizes it with the matching
-# scripts/normalize-*.sh into one finding shape, and uploads it as an artifact
-# — none of them gate their own job on the underlying tool's exit code. A
-# final `aggregate` job downloads every artifact, merges them with
-# scripts/aggregate-findings.sh, posts one job summary, and is the only job
-# that fails the run. That is what makes the check one legible red/green
-# signal instead of four tools' worth of raw output a reviewer has to open
-# individually.
+# Every leg normalizes its output and uploads it as an artifact without gating;
+# the final `aggregate` job merges them and is the only job that fails the run.
+# See README § Using it from another repository.
 name: policy-check
 
 on:
@@ -71,9 +59,9 @@ on:
         required: false
         default: .platform-policy-exceptions.yaml
 
-# The jobs read two repositories and write nothing. Declaring permissions here
-# rather than inheriting the caller's token scope means a caller with a broad
-# default token does not hand that scope to policy evaluation.
+# These jobs read two repositories and write nothing. Declared here rather than
+# inherited, so a caller's broad default token is not handed to policy
+# evaluation.
 permissions:
   contents: read
 
@@ -136,8 +124,8 @@ jobs:
           fi
 
   helm:
-    # Coverage belongs in the check name, not only its logs: a green check must
-    # show exactly which committed values file it proves compliant.
+    # Coverage in the check name, not only the logs: a green check must show
+    # which committed values file it proves compliant.
     name: Helm — ${{ matrix.chart }} — ${{ matrix.coverage }}
     needs: discover-helm
     if: needs.discover-helm.outputs.has_charts == 'true'
@@ -159,8 +147,8 @@ jobs:
           path: .policy-gate
           persist-credentials: false
 
-      # The hosted runner's Helm version changes independently of this policy
-      # ref; pinning it keeps identical chart inputs rendering identically.
+      # Pinned: the runner's Helm version changes independently of this policy
+      # ref, and identical chart inputs must render identically.
       - name: Install Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
@@ -194,13 +182,9 @@ jobs:
 
           helm lint "${helm_args[@]}"
 
-      # pipefail is load-bearing: without it a failed render could be hidden by
-      # Conftest successfully evaluating an empty stream.
-      #
-      # No `--fail-on-warn` and no reliance on Conftest's own exit code: this
-      # leg reports findings, it does not decide the run's outcome. The
-      # `aggregate` job below is the only job that gates, so `|| true` lets the
-      # artifact upload step still run when Conftest finds a `deny`.
+      # pipefail is load-bearing: without it a failed render is hidden by
+      # Conftest successfully evaluating an empty stream. `|| true` because this
+      # leg reports findings and only `aggregate` gates.
       - name: Conftest — rendered Helm chart
         env:
           CHART_PATH: ${{ matrix.chart }}
@@ -236,8 +220,8 @@ jobs:
           retention-days: 1
 
   no-helm-charts:
-    # An explicit check prevents a repository with broken discovery or no
-    # charts from looking indistinguishable from one whose charts passed.
+    # An explicit check, so broken discovery does not look like a chart that
+    # passed.
     name: Helm — no charts found
     needs: discover-helm
     if: needs.discover-helm.outputs.has_charts == 'false'
@@ -249,22 +233,19 @@ jobs:
           echo '::notice title=Helm chart discovery::no charts found'
 
   kubernetes:
-    # Not an input. A `runs-on: ${{ inputs.runner }}` would defeat GHA-003,
-    # which approves runner labels by reading them statically out of the YAML —
-    # an expression is not a label it can check.
+    # Not an input: a `runs-on: ${{ inputs.runner }}` would defeat GHA-003,
+    # which reads runner labels statically out of the YAML.
     runs-on: ubuntu-latest
     steps:
-      # Default repository/ref in a `workflow_call` is the caller's, at the
-      # commit that triggered it. `persist-credentials: false` keeps the token
-      # out of `.git/config`, where any later step — including one added to the
-      # caller's manifests directory — could read it.
+      # `persist-credentials: false` keeps the caller's token out of
+      # `.git/config`, where any later step could read it.
       - name: Check out the calling repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
           persist-credentials: false
 
-      # Second checkout under a dotted path so the policies cannot themselves
-      # be picked up as manifests when a caller points `manifest-paths` at `.`.
+      # Dotted path, so the policies cannot themselves be picked up as manifests
+      # when a caller points `manifest-paths` at `.`.
       - name: Check out the policies
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
@@ -273,9 +254,8 @@ jobs:
           path: .policy-gate
           persist-credentials: false
 
-      # Pinned to the version `make check` and test.yml run, so a caller cannot
-      # be failed — or passed — by a Conftest release the policies were never
-      # tested against.
+      # Pinned to the version `make check` and test.yml run, so a caller is
+      # never failed or passed by an untested Conftest release.
       - name: Install conftest
         env:
           CONFTEST_VERSION: 0.68.2
@@ -284,16 +264,10 @@ jobs:
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin conftest
 
-      # Inputs reach the shell through `env`, never through `${{ }}` inside the
-      # script body: a caller controls every one of these values, and inlined
-      # expansion would let `manifest-paths` close the quote and run commands on
-      # a runner holding the caller's token.
-      #
-      # This leg reports findings; it does not gate. The `aggregate` job below
-      # is the only job that fails the run, so `|| true` lets the artifact
-      # upload step run even when Conftest finds a `deny`. A path that matches
-      # no files is still a hard failure here — that is a misconfiguration, not
-      # a finding, and belongs to this job, not the aggregator.
+      # Caller-controlled inputs reach the shell through `env`, never through
+      # `${{ }}` inside the script body: inlined expansion would let
+      # `manifest-paths` close the quote and run commands on a runner holding
+      # the caller's token.
       - name: Conftest — Kubernetes manifests
         env:
           MANIFEST_PATHS: ${{ inputs.manifest-paths }}
@@ -304,13 +278,9 @@ jobs:
           # spaces are unsupported for that reason and the docs say so.
           read -ra paths <<<"$MANIFEST_PATHS"
 
-          # `--namespace kubernetes` because Conftest defaults to `main`, which
-          # holds no rules here and would report zero findings on anything.
-          #
-          # `--data .policy-gate/data` is load-bearing: K8S-006 reads its
-          # registry allowlist from there and comprehends over it, so a missing
-          # data root approves nothing rather than everything. Dropping the flag
-          # turns the check red, not green.
+          # Both flags are load-bearing: Conftest defaults to the empty `main`
+          # namespace, and K8S-006 comprehends over its allowlist, so a missing
+          # data root approves nothing rather than everything.
           conftest test \
             --policy .policy-gate/policy \
             --data .policy-gate/data \
@@ -318,11 +288,9 @@ jobs:
             --output json \
             "${paths[@]}" >raw.json || true
 
-          # A misconfigured or empty `manifest-paths` makes Conftest print an
-          # error and emit no JSON at all, rather than `[]`. That is the only
-          # way this step can tell "no findings" apart from "nothing was
-          # evaluated" — checked explicitly, so it stays a hard failure instead
-          # of being swallowed by the `|| true` above.
+          # A bad `manifest-paths` makes Conftest emit no JSON rather than `[]`,
+          # which is the only way to tell "no findings" from "nothing was
+          # evaluated". Checked explicitly so `|| true` cannot swallow it.
           jq empty raw.json
           .policy-gate/scripts/normalize-conftest.sh raw.json >findings.json
 
@@ -334,10 +302,8 @@ jobs:
           retention-days: 1
 
   zizmor:
-    # Zizmor covers injection, permissions, and artifact poisoning across
-    # `.github/workflows/` — the analysis GHA-001 does not attempt (see
-    # policy/github/workflow.rego). Judgment about that boundary is the point;
-    # reimplementing Zizmor's audits in Rego would not be.
+    # Zizmor covers injection, permissions, and artifact poisoning — the
+    # analysis GHA-001 deliberately does not attempt.
     name: Zizmor — .github/workflows/
     runs-on: ubuntu-latest
     steps:
@@ -362,12 +328,8 @@ jobs:
           curl -fsSL "https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/zizmor-x86_64-unknown-linux-gnu.tar.gz" \
             | sudo tar -xz -C /usr/local/bin zizmor
 
-      # `--offline` because this job carries no GitHub token (permissions are
-      # `contents: read` for the whole workflow) and a caller's check should
-      # not depend on network reachability at audit time.
-      #
-      # A workflow directory always exists in any repository with CI, so no
-      # "nothing found" branch is needed the way Helm discovery has one.
+      # `--offline` because this job carries no GitHub token, and a caller's
+      # check should not depend on network reachability at audit time.
       - name: Zizmor
         run: |
           set -euo pipefail
@@ -404,10 +366,8 @@ jobs:
           fi
 
   hadolint:
-    # Hadolint owns every Dockerfile instruction except FROM — DOCKER-001/002
-    # in policy/dockerfile/dockerfile.rego cover the base-image registry and
-    # tag, deliberately scoped narrowly so the two tools don't issue different
-    # verdicts on the same hygiene rule.
+    # Hadolint owns every Dockerfile instruction except FROM, which
+    # DOCKER-001/002 cover.
     name: Hadolint — Dockerfiles
     needs: discover-dockerfiles
     if: needs.discover-dockerfiles.outputs.has_dockerfiles == 'true'
@@ -451,11 +411,9 @@ jobs:
           retention-days: 1
 
   exceptions:
-    # A missing exceptions file is not an error — most consumers have none.
-    # A present-but-invalid one is: shape and expiry are validated here so
-    # that a malformed or expired entry surfaces as a `deny` in the same
-    # summary as everything else, instead of failing silently at suppression
-    # time in the `aggregate` job below.
+    # A missing exceptions file is not an error; a present-but-invalid one is.
+    # Validated here so it surfaces as a `deny` in the same summary as
+    # everything else, rather than failing silently at suppression time.
     name: Validate policy exceptions
     runs-on: ubuntu-latest
     steps:
@@ -507,10 +465,8 @@ jobs:
 
   aggregate:
     name: Aggregate findings
-    # `if: always()` because a `deny` in any leg reports success for the job
-    # itself now (each leg's tool failure is swallowed with `|| true`) — and
-    # `no-helm-charts`/`hadolint` legitimately skip, so this still has to run
-    # when the others succeed, fail, or are skipped.
+    # `if: always()` because `no-helm-charts` and `hadolint` legitimately skip,
+    # so this has to run whether the others succeed, fail, or are skipped.
     needs: [kubernetes, helm, no-helm-charts, zizmor, discover-dockerfiles, hadolint, exceptions]
     if: always()
     runs-on: ubuntu-latest
@@ -535,10 +491,6 @@ jobs:
         with:
           version: 1.18.2
 
-      # `if-no-files-found: ignore` on download would silently produce zero
-      # files for a job that never ran (e.g. `helm` when there are no charts);
-      # the default `warn` is fine since `no-helm-charts` covers that case
-      # explicitly and this step doesn't fail either way.
       - name: Download findings
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
@@ -546,10 +498,8 @@ jobs:
           path: findings
           merge-multiple: false
 
-      # Suppression only ever applies to findings from the policy engines —
-      # never to the `exceptions` leg's own EXC-* findings. Otherwise an
-      # exceptions file could suppress the very validation that would have
-      # failed it closed.
+      # Never applied to the `exceptions` leg's own EXC-* findings, or an
+      # exceptions file could suppress the validation that failed it closed.
       - name: Apply exceptions
         env:
           EXCEPTIONS_FILE: ${{ inputs.exceptions-file }}

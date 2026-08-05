@@ -16,18 +16,14 @@ test: ## Run the Rego unit tests
 fmt: ## Format Rego sources in place
 	$(OPA) fmt -w policy/
 
-# Runs the suite a second time, under --coverage, because the gate needs line
-# coverage and `make test` needs verbose output. A second `opa test` over this
-# policy set costs under a second; keeping the two targets independently
-# runnable is worth more than sharing the run.
+# Runs the suite a second time under --coverage: the gate needs line coverage
+# and `make test` needs verbose output. The extra run costs under a second.
 .PHONY: coverage
 coverage: ## Fail if any rule ID has no test that trips it
 	OPA=$(OPA) ./scripts/rule-coverage.sh
 
-# Belongs in `check` rather than only in CI. The violation this catches is
-# introduced by editing a file in this repo, so the reviewer who edits it is
-# the person who should see it go red — a gate that only fires after push
-# teaches people to push and wait.
+# In `check`, not only in CI: this catches violations introduced by editing a
+# file here, so whoever edits it should see it go red before pushing.
 .PHONY: self-check
 self-check: ## Evaluate this repo's own workflows and inventory against its policies
 	CONFTEST=$(CONFTEST) ./scripts/self-check.sh

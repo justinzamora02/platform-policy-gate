@@ -1,40 +1,22 @@
-# Policy exceptions.
+# Policy exceptions. Input is a consumer's `.platform-policy-exceptions.yaml`,
+# not a manifest.
 #
-# Input is a consumer's `.platform-policy-exceptions.yaml`, not a manifest:
-#
-#   exceptions:
-#     - id: K8S-006
-#       resource: Deployment/legacy-app
-#       owner: platform-team
-#       ticket: JIRA-123
-#       reason: registry migration in progress
-#       expires: 2026-12-31
-#
-# `resource` is optional and, when absent, suppresses every finding for that
-# rule ID rather than one — a broader grant, which is why owner/ticket/reason
-# are mandatory on every entry regardless of scope.
-#
-# This package only validates shape and expiry; scripts/apply-exceptions.sh
-# does the suppression, using `exceptions.active` for the entries this package
-# did not reject.
+# This package only validates shape and expiry; scripts/apply-exceptions.sh does
+# the suppression, reading `active` for the entries this package did not reject.
 package exceptions
 
 import rego.v1
 
 required_fields := {"id", "owner", "ticket", "reason", "expires"}
 
-# EXC-001: every entry must carry id, owner, ticket, reason, and expires.
-# Missing context is what makes an exception impossible to audit later, so
-# it is rejected the same way an expired one is — fail closed, not silently
-# accepted with blank context.
+# EXC-001: every entry must carry id, owner, ticket, reason, and expires. An
+# entry without them cannot be audited later, so it fails closed.
 deny contains msg if {
 	some i, exc in input.exceptions
 	some field in required_fields
 
-	# `object.get` with a default is load-bearing: `exc[field]` on a missing
-	# key is undefined, and `not` on an undefined expression is itself
-	# undefined rather than true — it would silently drop this rule instead of
-	# firing on the exact case (a missing field) it exists to catch.
+	# `object.get` with a default is load-bearing: `not exc[field]` on a missing
+	# key is undefined rather than true, silently dropping this rule.
 	not is_string(object.get(exc, field, null))
 
 	msg := {
@@ -46,9 +28,8 @@ deny contains msg if {
 	}
 }
 
-# EXC-002: a rule ID naming a specific rule, not a family of them. An
-# exception is a documented, reviewed carve-out for one violation — a wildcard
-# turns it into a blanket suppression no reviewer signed off on.
+# EXC-002: an id must name one rule. A wildcard turns a reviewed carve-out into
+# a blanket suppression nobody signed off on.
 deny contains msg if {
 	some i, exc in input.exceptions
 	is_string(exc.id)
@@ -63,9 +44,8 @@ deny contains msg if {
 	}
 }
 
-# EXC-003: expires must be an ISO 8601 calendar date. A format Rego cannot
-# parse cannot be checked for expiry, so it is rejected here rather than
-# silently treated as never-expiring.
+# EXC-003: expires must be an ISO 8601 calendar date. A format Rego cannot parse
+# cannot be checked for expiry, so it is rejected rather than never-expiring.
 deny contains msg if {
 	some i, exc in input.exceptions
 	is_string(exc.expires)
@@ -85,10 +65,8 @@ valid_date(value) if {
 	time.parse_ns("2006-01-02", value)
 }
 
-# EXC-004: an expired exception fails closed. Once a `deny` here reaches the
-# aggregated summary it blocks the run — the same as if the exception did not
-# exist — rather than quietly stopping suppression while everything else stays
-# green.
+# EXC-004: an expired exception fails closed — this `deny` blocks the run rather
+# than the entry quietly ceasing to suppress.
 deny contains msg if {
 	some i, exc in input.exceptions
 	is_string(exc.expires)
@@ -106,10 +84,9 @@ deny contains msg if {
 
 expired(date) if time.parse_ns("2006-01-02", date) < time.now_ns()
 
-# An entry is usable for suppression only if no rule above denied it. Derived
-# from `deny` rather than restating its conditions: a new EXC-* rule
-# disqualifies its entry the moment it is written, where a second copy of the
-# conditions would fail open every time someone added a rule and forgot it.
+# An entry is usable only if no rule above denied it. Derived from `deny` rather
+# than restating its conditions, so a new EXC-* rule disqualifies its entry the
+# moment it is written.
 rejected := {m.resource | some m in deny}
 
 active contains exc if {

@@ -1,6 +1,11 @@
 # platform-policy-gate
 
-Tested OPA/Rego policies delivered as a reusable GitHub Actions workflow — gates rendered Helm output, Dockerfiles, and CI workflows.
+Tested OPA/Rego policies delivered as a reusable GitHub Actions workflow — gates
+rendered Helm output, Dockerfiles, and CI workflows.
+
+- [docs/design.md](docs/design.md) — why the policies are written the way they are
+- [docs/testing.md](docs/testing.md) — rule coverage and self-enforcement
+- [docs/production-gap.md](docs/production-gap.md) — what this demo does not do
 
 ## Quickstart
 
@@ -15,46 +20,9 @@ make self-check  # evaluate this repo's own workflows and inventory against thes
 make check       # all of the above, plus formatting and a strict type check (what CI runs)
 ```
 
-All three accept `OPA=` / `CONFTEST=` overrides if your binaries live elsewhere.
-
-### Rule coverage
-
-`scripts/rule-coverage.sh` fails the build when a policy can emit a rule ID that
-no test ever trips. Grepping the IDs out of `policy/` and out of
-`policy/*_test.rego` would report full coverage forever — the ID an assertion
-names is the same string the rule defines, and a comment mentioning a rule reads
-the same as the rule. So the two sides come from two tools instead: `opa parse
---json-include locations` for the IDs a policy can emit (an AST has no comments
-in it), and `opa test --coverage` for the ones a test actually reached. A deny
-body's `msg := ...` is only covered when the rule fired, which is the distinction
-the gate turns on.
-
-The unit is the emission site, not the ID — K8S-007 denies `:latest` and an
-untagged image from two separate rule bodies, and each needs its own test. Both
-sides are discovered at run time, so a new package is under the gate as soon as
-it is committed.
-
-### Self-enforcement
-
-`scripts/self-check.sh` runs the published rules against this repository. The
-tests prove a rule fires correctly against a fixture; they say nothing about
-whether the repo shipping the rule obeys it. Without this, `uses:
-actions/checkout@v5` could land in `.github/workflows/` here, every fixture
-would still pass, and a repository whose whole argument is policy-as-code would
-merge an unpinned action behind a green check.
-
-It evaluates two namespaces, because the two packages read two different kinds
-of document: `github` over `.github/workflows/`, and `repo` over an inventory
-generated from the working tree by `scripts/repo-inventory.sh`. Both run before
-the script exits, so one run reports everything wrong rather than the first
-thing. The inventory goes to a temp directory — it is an artifact of the current
-tree, not a source file, and `make inventory` remains the way to write one out
-for inspection (`repo-inventory.json`, gitignored).
-
-It is part of `make check`, and also a step of its own in CI, ahead of `make
-check`. The duplicated run costs under a second and buys a distinction worth
-seeing in the job summary: `make check` red means the policies are broken, and
-self-check red means the policies are fine and *this repository* violates them.
+All of them accept `OPA=` / `CONFTEST=` overrides if your binaries live
+elsewhere. The gates behind `coverage` and `self-check` are described in
+[docs/testing.md](docs/testing.md).
 
 ## Using it from another repository
 
@@ -87,15 +55,16 @@ jobs:
 | `exceptions-file` | no | `.platform-policy-exceptions.yaml` | Path to a policy-exceptions file. Absent suppresses nothing and is not an error; present-but-invalid fails closed as `deny`. |
 
 Helm charts are discovered by `Chart.yaml` anywhere in the caller's repository.
-Each chart is linted and rendered once for every chart-local `values*.yaml`
-file; a chart with none is rendered once with its defaults. The matrix check
-name includes the exact values path, or says that chart defaults were used, so
-a passing check cannot imply coverage beyond the committed values. A dedicated
+Each chart is linted and rendered once for every chart-local `values*.yaml` file;
+a chart with none is rendered once with its defaults. The matrix check name
+includes the exact values path, or says that chart defaults were used, so a
+passing check cannot imply coverage beyond the committed values. A dedicated
 check reports `no charts found` when discovery is empty.
 
 ### Exceptions
 
-An entry in the exceptions file suppresses matching findings until it expires:
+An entry in `.platform-policy-exceptions.yaml` suppresses matching findings until
+it expires:
 
 ```yaml
 exceptions:
@@ -107,13 +76,10 @@ exceptions:
     expires: 2026-12-31
 ```
 
-`policy/exceptions` validates shape and expiry, and is the only thing that
-decides which entries are usable — `scripts/apply-exceptions.sh` never
-re-derives that, so an entry that fails closed there cannot still suppress a
-finding. A missing field, a wildcard `id`, an unparseable date, or a past
-`expires` each disqualify the entry *and* emit their own `deny`, so a lapsed
-exception blocks the run rather than quietly ceasing to suppress. Exceptions
-never apply to the `EXC-*` findings themselves.
+A missing field, a wildcard `id`, an unparseable date, or a past `expires` each
+disqualify the entry *and* emit their own `deny`, so a lapsed exception blocks
+the run rather than quietly ceasing to suppress. See
+[docs/design.md § Exceptions](docs/design.md#exceptions).
 
 ## Layout
 
@@ -123,13 +89,8 @@ policy/<package>/*_test.rego     unit tests, colocated
 test/fixtures/<package>/<case>/  fixture documents
 data/<package>.yaml              config and allowlists a package reads from
 scripts/                         helpers used by make and by the workflow
+docs/                            design notes
 ```
-
-Fixtures are loaded by directory, not by filename: `opa test policy/ test/ data/`
-puts `test/fixtures/repo/license-missing/inventory.yaml` at
-`data.fixtures.repo["license-missing"]`. Files directly under a load root merge
-at the top, so `data/gha.yaml` lands on `data.gha` — one config document per
-policy package, keyed separately from the policy namespace it configures.
 
 ## Rules
 
@@ -187,38 +148,22 @@ policy package, keyed separately from the policy namespace it configures.
 | EXC-003 | `expires` is a `YYYY-MM-DD` date |
 | EXC-004 | `expires` is in the future |
 
-Every rule emits a structured object — `msg` for the human text (Conftest
-requires it under that key), plus `id`, `severity`, `enforcement`, and
-`resource`, which Conftest surfaces under `metadata` for the aggregation step.
-Container-scoped findings add `container`; workflow findings add `action` or
-`runner`.
+Every rule emits a structured object rather than a bare string — see
+[docs/design.md § Finding shape](docs/design.md#finding-shape).
 
-Conftest defaults to the `main` namespace, so evaluating a package directly
-means naming it:
+### Running a package directly
+
+Conftest defaults to the `main` namespace, so evaluating a package means naming
+it. `--data data/` is not optional either: K8S-006, DOCKER-001, GHA-002, and
+GHA-003 read their allowlists from `data/` and
+[fail closed](docs/design.md#allowlists-fail-closed) without it.
 
 ```sh
 conftest test --policy policy --data data/ --namespace kubernetes rendered.yaml
+conftest test --policy policy --data data/ --namespace github .github/workflows/test.yml
 ```
 
-K8S-006, DOCKER-001, GHA-002, and GHA-003 read their allowlists from `data/`,
-so widening one is a review of a YAML file, not a change to Rego:
-
-```sh
-conftest test --policy policy --namespace github --data data/ \
-  .github/workflows/test.yml
-```
-
-GHA-001 overlaps with [Zizmor](https://docs.zizmor.sh/) by design. It is
-written in Rego to show the parsing — notably that `on:` is a YAML 1.1 boolean,
-so the trigger key reaches a policy as `"on"`, `"true"`, or `true` depending on
-the parser (`conftest parse` any workflow to see it). Zizmor owns the deeper
-analysis: template injection, excessive permissions, artifact poisoning. This
-package does not attempt any of that.
-
-`--data data/` is not optional. K8S-006, DOCKER-001, and GHA-002 fail closed
-without it — an allowlist that never loaded approves nothing, so the check goes
-red rather than silently green. See the note on `approved_registries` under
-Kubernetes below for how that is arranged, and why it does not come for free.
+Widening an allowlist is therefore a review of a YAML file, not a change to Rego.
 
 Repo-hygiene rules evaluate a repository inventory rather than a manifest:
 
@@ -226,78 +171,3 @@ Repo-hygiene rules evaluate a repository inventory rather than a manifest:
 make inventory   # writes repo-inventory.json
 conftest test --policy policy --namespace repo repo-inventory.json
 ```
-
-### Kubernetes traversal
-
-A PodSpec sits at a different depth per kind, so `policy/kubernetes/lib.rego`
-resolves it once and every rule reads `lib.containers`:
-
-| Kind | PodSpec at |
-|---|---|
-| `Pod` | `spec` |
-| `Deployment`, `StatefulSet`, `DaemonSet`, `ReplicaSet`, `Job` | `spec.template.spec` |
-| `CronJob` | `spec.jobTemplate.spec.template.spec` |
-
-It walks `initContainers` alongside `containers` — init containers run with the
-same privileges as the rest of the pod, so a policy set that only reads
-`spec.containers` misses half the attack surface. `pod_spec` is left undefined
-for every other kind, which is what keeps the rules silent on the Services and
-ConfigMaps that come out of the same `helm template` run.
-
-Five things this package is deliberate about:
-
-- **`securityContext` inheritance.** Fields inherit pod → container, but a
-  container setting `runAsNonRoot: false` under a pod that sets `true` must
-  still be denied, because Kubernetes honours the container. A plain
-  "container value, or else pod value" fallback reads the explicit `false` as
-  absent and passes exactly the manifest the rule exists to catch, so both
-  levels are read through `object.get` instead.
-- **Image references are parsed, not pattern-matched.** A registry is only a
-  registry when the first path component looks like a host (a dot, a port, or
-  `localhost`), so `nginx:1.27` resolves to `docker.io` rather than to a
-  registry named `nginx:1.27`, and `myorg/app` to `docker.io` rather than to
-  one named `myorg` — Docker Hub being exactly what an allowlist needs to
-  catch. Tags are read from the last path component only, so the port in
-  `localhost:5000/app` is not mistaken for a tag, and a `@sha256:` digest is
-  accepted in place of one instead of being read as a tag named after its hex.
-- **The allowlist is read through a comprehension.** `approved_registries` is
-  built as `{r | some r in data.k8s.approved_registries}` rather than tested
-  against directly, and the difference is not cosmetic: `not registry in
-  data.k8s.approved_registries` *passes every image* when that data was never
-  loaded, so a run that forgot `--data data/` goes green. Comprehending over
-  the same undefined reference yields an empty set, so an absent allowlist
-  approves nothing and the check fails closed.
-- **Inheritance is per field, not per package.** `runAsNonRoot` (K8S-002) is a
-  field of both `PodSecurityContext` and the container's `SecurityContext`, so
-  it inherits. `readOnlyRootFilesystem` (K8S-008) and `capabilities` (K8S-009)
-  exist only on the container, so a pod-level value is inert — the API drops it
-  and the kubelet never sees it. Inheriting those two would clear a container
-  the cluster still runs writable and fully capable, so they read the container
-  alone; `test_k8s_008_does_not_inherit_from_the_pod` pins that.
-- **Traversal is tested on its own.** A traversal gap fails *open* — a kind
-  that resolves to no PodSpec yields no containers and therefore no findings,
-  so every rule test still passes. `lib_test.rego` asserts the reachable
-  container names per kind rather than relying on the rules to notice.
-
-## Production gap
-
-What this demo does not do, and what would change with real infrastructure
-behind it. Knowing the limits of your own system is worth more than pretending
-they don't exist.
-
-- **CI is not an enforcement boundary.** Anything not applied through this
-  pipeline is unchecked. In production the authoritative control is an
-  admission controller (Kyverno or Gatekeeper); this pipeline would become
-  fast feedback in front of it, and the k8s policies would be authored for the
-  admission layer and run in CI from the same source to avoid drift.
-- **Values coverage is partial.** Charts are rendered against the
-  `values*.yaml` files committed in the repo. Real deployment values often
-  live in a GitOps repo or ArgoCD `Application`, so a green check proves the
-  committed values are compliant — nothing more. The output states which
-  values files were evaluated.
-- **Adoption is voluntary here.** In an org, the check would be required via
-  an organization ruleset, and new rules would need a `warn → deny` lifecycle
-  with lead time so a policy change doesn't break every repo on merge day.
-- **Findings are surfaced as job summaries, not SARIF.** SARIF upload to code
-  scanning would be the production choice; Conftest has no native SARIF
-  output, so it requires a converter.

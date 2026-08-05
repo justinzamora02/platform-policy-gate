@@ -3,9 +3,8 @@ package helm
 
 import rego.v1
 
-# Chart.yaml keeps both apiVersion and name at the document root. Kubernetes
-# manifests put names under metadata, so requiring this pair prevents a missing
-# chart field from turning an unrelated YAML document into a Helm finding.
+# Chart.yaml keeps apiVersion and name at the document root, where a Kubernetes
+# manifest puts its name under metadata — enough to tell the two apart.
 is_chart if {
 	input.apiVersion in {"v1", "v2"}
 	is_string(input.name)
@@ -50,8 +49,8 @@ deny contains msg if {
 	msg := finding("HELM-002", "low", "Chart.yaml declares no description")
 }
 
-# HELM-003: Helm uses this version to order and package chart releases, so a
-# merely present string is insufficient; it must follow semantic versioning.
+# HELM-003: Helm orders and packages releases by this version, so a merely
+# present string is insufficient.
 deny contains msg if {
 	is_chart
 	not has_semver_version

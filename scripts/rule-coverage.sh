@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
-# Fail the build when a policy can emit a rule ID that no test ever trips.
-# IDs come from `opa parse` (an AST has no comments, so prose about a rule is
-# not a rule), coverage from `opa test --coverage`. See README § Rule coverage
-# for why grepping both sides cannot work.
-#
-# Assumes a rule ID literal appears inside the rule that emits it; a package
-# keeping its IDs in a lookup table would be measured on the table instead.
+# Fail the build when a policy can emit a rule ID that no test ever trips. IDs
+# come from `opa parse`, coverage from `opa test --coverage`.
 set -euo pipefail
 
 OPA="${OPA:-opa}"
 
-# Paths in the coverage report and in the parse output are the paths handed to
-# opa, so both sides have to be produced from the same working directory for
-# the join to line up.
+# Both sides key on the paths handed to opa, so they must be produced from the
+# same working directory for the join to line up.
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 work="$(mktemp -d)"
@@ -23,8 +17,7 @@ if ! "$OPA" test policy/ test/ data/ --coverage --format json >"$work/coverage.j
 	exit 1
 fi
 
-# One parse per policy file rather than per directory, so the file name in the
-# emitted record is the same string the coverage report is keyed by.
+# One parse per file, so the emitted file name matches the coverage report's key.
 : >"$work/sites.jsonl"
 while IFS= read -r source; do
 	"$OPA" parse "$source" --format json --json-include locations,-comments |
