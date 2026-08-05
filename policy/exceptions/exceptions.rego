@@ -106,31 +106,13 @@ deny contains msg if {
 
 expired(date) if time.parse_ns("2006-01-02", date) < time.now_ns()
 
-# An entry is usable for suppression only once it has cleared every check
-# above — invalid shape, a wildcard id, or an unparsed/expired date all
-# disqualify it independently of one another.
-invalid(exc) if {
-	some field in required_fields
-	not is_string(object.get(exc, field, null))
-}
-
-invalid(exc) if {
-	is_string(exc.id)
-	regex.match(`[*?]`, exc.id)
-}
-
-invalid(exc) if {
-	is_string(exc.expires)
-	not valid_date(exc.expires)
-}
-
-invalid(exc) if {
-	is_string(exc.expires)
-	valid_date(exc.expires)
-	expired(exc.expires)
-}
+# An entry is usable for suppression only if no rule above denied it. Derived
+# from `deny` rather than restating its conditions: a new EXC-* rule
+# disqualifies its entry the moment it is written, where a second copy of the
+# conditions would fail open every time someone added a rule and forgot it.
+rejected := {m.resource | some m in deny}
 
 active contains exc if {
-	some exc in input.exceptions
-	not invalid(exc)
+	some i, exc in input.exceptions
+	not sprintf("exceptions[%d]", [i]) in rejected
 }
