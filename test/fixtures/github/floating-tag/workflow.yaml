@@ -3,6 +3,8 @@ name: build
 on:
   pull_request:
 
+permissions: {}
+
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -135,6 +135,7 @@ docs/                            design notes
 | GHA-001 | Third-party actions pinned to a full commit SHA |
 | GHA-002 | Actions appear in the `approved_actions` list in `data/gha.yaml` |
 | GHA-003 | Runner labels appear in the `approved_runners` list in `data/gha.yaml` |
+| GHA-004 | Workflows declare an explicit `permissions` block and do not use `write-all` |
 
 **Dockerfile** (`policy/dockerfile`) — evaluated against parsed Dockerfiles:
 
