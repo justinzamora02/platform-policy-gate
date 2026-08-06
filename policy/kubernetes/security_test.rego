@@ -185,8 +185,8 @@ test_k8s_009_denies_a_lowercase_all if {
 	containers_flagged(pod, "K8S-009") == {"app"}
 }
 
-# Adding a capability back on top of `drop: [ALL]` is a scoped, reviewable
-# decision — a different rule's business, not this one's.
+# Adding a capability back on top of `drop: [ALL]` is K8S-013's business, not
+# this one's.
 test_k8s_009_allows_a_capability_added_back_on_top_of_all if {
 	pod := {
 		"kind": "Pod",
@@ -198,6 +198,91 @@ test_k8s_009_allows_a_capability_added_back_on_top_of_all if {
 	}
 
 	not "K8S-009" in ids(pod)
+}
+
+# K8S-013
+
+# One finding per container naming every disallowed addition, not one per
+# capability. The init container adds only NET_BIND_SERVICE and stays clean.
+test_k8s_013_denies_capabilities_that_are_not_allowlisted if {
+	ids(fixtures.kubernetes["pod-adds-capability"]) == {"K8S-013"}
+	containers_flagged(fixtures.kubernetes["pod-adds-capability"], "K8S-013") == {"app"}
+
+	messages(fixtures.kubernetes["pod-adds-capability"], "K8S-013") == {`container "app" adds capability NET_RAW, SYS_ADMIN`}
+}
+
+# The hole this rule exists to close: `drop: [ALL]` plus `add: [SYS_ADMIN]`
+# passes K8S-009 and every other rule in the package.
+test_k8s_013_denies_what_k8s_009_alone_allows if {
+	pod := {
+		"kind": "Pod",
+		"metadata": {"name": "p"},
+		"spec": {"containers": [{
+			"name": "app",
+			"securityContext": {"capabilities": {"drop": ["ALL"], "add": ["SYS_ADMIN"]}},
+		}]},
+	}
+
+	not "K8S-009" in ids(pod)
+	containers_flagged(pod, "K8S-013") == {"app"}
+}
+
+# Kubernetes matches capability names exactly, so `sys_admin` is not the
+# allowlisted spelling of anything. Case-folding before the lookup would turn
+# the allowlist into a fuzzy match.
+test_k8s_013_denies_a_lowercase_capability_name if {
+	pod := {
+		"kind": "Pod",
+		"metadata": {"name": "p"},
+		"spec": {"containers": [{
+			"name": "app",
+			"securityContext": {"capabilities": {"add": ["net_bind_service"]}},
+		}]},
+	}
+
+	messages(pod, "K8S-013") == {`container "app" adds capability net_bind_service`}
+}
+
+# The verdict follows the data file, with no edit to any rule.
+test_k8s_013_verdict_follows_the_data_file if {
+	pod := fixtures.kubernetes["pod-adds-capability"]
+
+	containers_flagged(pod, "K8S-013") == {"app"} with data.k8s.allowed_capabilities as ["NET_BIND_SERVICE", "NET_RAW"]
+	messages(pod, "K8S-013") == {`container "app" adds capability SYS_ADMIN`} with data.k8s.allowed_capabilities as ["NET_BIND_SERVICE", "NET_RAW"]
+}
+
+# Nothing allowlisted means nothing added passes. An unloaded `data.k8s`
+# collapses to this same empty set through the comprehension in security.rego,
+# so a run that forgot `--data data/` fails loudly instead of approving
+# SYS_ADMIN.
+test_k8s_013_denies_every_addition_when_the_allowlist_never_loaded if {
+	kubernetes.allowed_capabilities == set() with data.k8s as {}
+
+	containers_flagged(fixtures.kubernetes["pod-adds-capability"], "K8S-013") == {"app", "init"} with data.k8s as {}
+}
+
+# K8S-014
+
+test_k8s_014_denies_a_host_port if {
+	ids(fixtures.kubernetes["pod-host-port"]) == {"K8S-014"}
+	containers_flagged(fixtures.kubernetes["pod-host-port"], "K8S-014") == {"app"}
+
+	messages(fixtures.kubernetes["pod-host-port"], "K8S-014") == {`container "app" binds hostPort 8080`}
+}
+
+# `hostPort: 0` is how the API server spells "unset", so it binds nothing and
+# must not be reported — the same explicit-zero trap as `privileged: false`.
+test_k8s_014_allows_host_port_zero if {
+	pod := {
+		"kind": "Pod",
+		"metadata": {"name": "p"},
+		"spec": {"containers": [{
+			"name": "app",
+			"ports": [{"containerPort": 8080, "hostPort": 0}],
+		}]},
+	}
+
+	not "K8S-014" in ids(pod)
 }
 
 # Shape

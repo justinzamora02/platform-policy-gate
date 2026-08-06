@@ -131,6 +131,8 @@ docs/                            design notes
 | K8S-017 | Roles do not grant `escalate`, `bind`, or `impersonate` |
 | K8S-018 | ClusterRoles do not grant read access to core `secrets` |
 | K8S-019 | No binding grants the built-in `cluster-admin` role |
+| K8S-013 | `capabilities.add` limited to the `allowed_capabilities` list in `data/k8s.yaml` |
+| K8S-014 | No `hostPort` on any container |
 
 **GitHub Actions** (`policy/github`) — evaluated against workflow files:
 
@@ -179,8 +181,8 @@ Every rule emits a structured object rather than a bare string — see
 ### Running a package directly
 
 Conftest defaults to the `main` namespace, so evaluating a package means naming
-it. `--data data/` is not optional either: K8S-006, DOCKER-001, GHA-002, and
-GHA-003 read their allowlists from `data/` and
+it. `--data data/` is not optional either: K8S-006, K8S-013, DOCKER-001,
+GHA-002, and GHA-003 read their allowlists from `data/` and
 [fail closed](docs/design.md#allowlists-fail-closed) without it.
 
 ```sh
