@@ -53,3 +53,29 @@ test_k8s_010_is_silent_when_the_pod_does_not_set_automount if {
 test_k8s_010_allows_automount_turned_off if {
 	not "K8S-010" in ids(sa_pod({"automountServiceAccountToken": false}))
 }
+
+# K8S-015
+
+# The case K8S-010 leaves alone, judged from the document that can judge it. A
+# ServiceAccount that says nothing mounts its token, so silence has to deny —
+# an `object.get` default is what keeps a missing key from dropping the rule.
+test_k8s_015_denies_a_service_account_that_never_opts_out if {
+	ids(fixtures.kubernetes["serviceaccount-automount-absent"]) == {"K8S-015"}
+
+	messages(fixtures.kubernetes["serviceaccount-automount-absent"], "K8S-015") == {"ServiceAccount does not set automountServiceAccountToken: false, so its token mounts by default"}
+}
+
+test_k8s_015_denies_an_explicit_automount_true if {
+	ids(fixtures.kubernetes["serviceaccount-automount-enabled"]) == {"K8S-015"}
+}
+
+test_k8s_015_allows_automount_turned_off if {
+	ids(fixtures.kubernetes["serviceaccount-automount-disabled"]) == set()
+}
+
+# The rule guards on the kind rather than on a PodSpec, so the other non-workload
+# documents from the same render stay silent.
+test_k8s_015_is_silent_on_other_kinds if {
+	not "K8S-015" in ids(fixtures.kubernetes.service)
+	not "K8S-015" in ids(fixtures.kubernetes["pod-compliant"])
+}

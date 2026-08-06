@@ -1,0 +1,7 @@
+# K8S-015 fail fixture. The same mount as the absent case, opted into
+# deliberately rather than by default.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: automount-serviceaccount
+automountServiceAccountToken: true
