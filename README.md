@@ -6,23 +6,7 @@ rendered Helm output, Dockerfiles, and CI workflows.
 - [docs/design.md](docs/design.md) — why the policies are written the way they are
 - [docs/testing.md](docs/testing.md) — rule coverage and self-enforcement
 - [docs/production-gap.md](docs/production-gap.md) — what this demo does not do
-
-## Quickstart
-
-Needs [`opa`](https://www.openpolicyagent.org/docs/latest/#running-opa) and
-[`conftest`](https://www.conftest.dev/install/) on `PATH`
-(`brew install opa conftest`).
-
-```sh
-make test        # opa test + conftest verify
-make coverage    # fail if any rule has no test that trips it
-make self-check  # evaluate this repo's own workflows and inventory against these rules
-make check       # all of the above, plus formatting and a strict type check (what CI runs)
-```
-
-All of them accept `OPA=` / `CONFTEST=` overrides if your binaries live
-elsewhere. The gates behind `coverage` and `self-check` are described in
-[docs/testing.md](docs/testing.md).
+- [contribution.md](contribution.md) — how to contribute
 
 ### Local commit gate
 
@@ -95,36 +79,6 @@ disqualify the entry *and* emit their own `deny`, so a lapsed exception blocks
 the run rather than quietly ceasing to suppress. See
 [docs/design.md § Exceptions](docs/design.md#exceptions).
 
-## Releasing
-
-`.github/workflows/release.yml` is triggered by hand — Actions → release → Run
-workflow, from `master`, with a version like `v1.2.0`. It re-runs `make
-self-check` and `make check` on the selected commit, then creates the tag and
-the GitHub release in one `gh release create`.
-
-There is no floating `v1` alias, and the workflow refuses a version whose tag
-already exists. A tag is the unit of distribution: consumers pin `policy-ref`
-to one, and the argument for `policy-ref` having no default — a rule added here
-must not change a caller's verdict without a commit on the caller's side —
-holds only while the tag they pinned stays on the commit that was reviewed.
-Upgrading is therefore an explicit bump of both refs in the caller's workflow.
-
-Releases are cut from `master` only. Both that and the version format are shell
-checks rather than a job-level `if`, because a skipped job reports green, and a
-release workflow that can report green without releasing anything is worse than
-one that fails.
-
-## Layout
-
-```
-policy/<package>/*.rego          policies, one package per domain
-policy/<package>/*_test.rego     unit tests, colocated
-test/fixtures/<package>/<case>/  fixture documents
-data/<package>.yaml              config and allowlists a package reads from
-scripts/                         helpers used by make and by the workflow
-docs/                            design notes
-```
-
 ## Rules
 
 **Kubernetes** (`policy/kubernetes`) — evaluated against rendered manifests:
@@ -191,24 +145,3 @@ docs/                            design notes
 
 Every rule emits a structured object rather than a bare string — see
 [docs/design.md § Finding shape](docs/design.md#finding-shape).
-
-### Running a package directly
-
-Conftest defaults to the `main` namespace, so evaluating a package means naming
-it. `--data data/` is not optional either: K8S-006, K8S-013, DOCKER-001,
-GHA-002, and GHA-003 read their allowlists from `data/` and
-[fail closed](docs/design.md#allowlists-fail-closed) without it.
-
-```sh
-conftest test --policy policy --data data/ --namespace kubernetes rendered.yaml
-conftest test --policy policy --data data/ --namespace github .github/workflows/test.yml
-```
-
-Widening an allowlist is therefore a review of a YAML file, not a change to Rego.
-
-Repo-hygiene rules evaluate a repository inventory rather than a manifest:
-
-```sh
-make inventory   # writes repo-inventory.json
-conftest test --policy policy --namespace repo repo-inventory.json
-```
