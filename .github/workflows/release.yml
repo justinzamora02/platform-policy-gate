@@ -1,0 +1,96 @@
+# Manual release: tag a reviewed commit on master and publish it.
+#
+# A tag is the unit of distribution here — callers pin `policy-ref` to one, and
+# a rule added in this repository reaches them only when they move that pin. So
+# this workflow only ever creates a tag, never moves one, and refuses a version
+# that already exists. There is no floating `v1` alias for the same reason
+# `policy-ref` has no default: a policy change must not be able to turn a
+# caller's check red without a commit on the caller's side.
+#
+# The full gate runs again here even though `test` already ran it on this
+# commit. The tag is what consumers actually get, and a minute of re-running
+# removes the question of which commit the green check belonged to.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, as vMAJOR.MINOR.PATCH (e.g. v1.2.0)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      # Creating the tag and the release; nothing else is written.
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      # Everything that can make this release the wrong release, checked before
+      # anything is published. These are shell rather than a job-level `if`
+      # because a wrong selection has to be a red run: a skipped job reports
+      # green, and "the release workflow passed" would then mean nothing.
+      #
+      # `workflow_dispatch` runs against whichever ref the operator picked, so
+      # the ref is one of the inputs being validated.
+      - name: Validate the version and the ref
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release: version '$VERSION' is not vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF" != "refs/heads/master" ]]; then
+            echo "release: releases are cut from master, not '$GITHUB_REF'" >&2
+            exit 1
+          fi
+
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
+            echo "release: tag '$VERSION' already exists, and tags here never move" >&2
+            exit 1
+          fi
+
+      - uses: open-policy-agent/setup-opa@b2b258e089860efaadaaf71bf6e3aecb4a3eeff1 # v2.4.0
+        with:
+          version: 1.18.2
+
+      - name: Install conftest
+        env:
+          CONFTEST_VERSION: 0.68.2
+        run: |
+          curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin conftest
+
+      - name: Enforce our own policies on this repo (GHA-001-003, REPO-001-002)
+        run: make self-check
+
+      - name: Format, type-check, test, rule coverage
+        run: make check
+
+      # `gh release create` creates the tag at --target, so the tag and the
+      # release are one API call and there is no window where a tag exists
+      # without the release that documents it.
+      - name: Create the tag and the release
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh release create "$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --generate-notes
