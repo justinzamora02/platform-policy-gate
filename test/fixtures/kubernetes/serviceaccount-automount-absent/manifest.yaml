@@ -1,0 +1,7 @@
+# K8S-015 fail fixture, and the case the rule exists for. Saying nothing is not
+# neutral: the API server defaults automount to true, so every pod bound to this
+# ServiceAccount gets a bearer token it never asked for.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: silent-serviceaccount

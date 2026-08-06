@@ -29,3 +29,18 @@ deny contains msg if {
 		"pod mounts the default ServiceAccount token (automountServiceAccountToken: true)",
 	)
 }
+
+# K8S-015: the other half of that resolution, read off the ServiceAccount
+# document Conftest evaluates separately. `object.get` with a default of `true`
+# because absent is the case the rule exists for — it means `true` at the API
+# server, and a bare field reference would be undefined and drop the rule there.
+deny contains msg if {
+	input.kind == "ServiceAccount"
+	object.get(input, "automountServiceAccountToken", true) != false
+
+	msg := lib.finding(
+		"K8S-015",
+		"medium",
+		"ServiceAccount does not set automountServiceAccountToken: false, so its token mounts by default",
+	)
+}

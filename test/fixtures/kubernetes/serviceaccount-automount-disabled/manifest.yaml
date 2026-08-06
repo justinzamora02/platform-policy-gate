@@ -1,0 +1,7 @@
+# K8S-015 pass fixture. The only spelling that actually stops the token from
+# being mounted: an explicit `false`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: compliant-serviceaccount
+automountServiceAccountToken: false
