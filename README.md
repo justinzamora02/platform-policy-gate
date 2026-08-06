@@ -142,6 +142,7 @@ docs/                            design notes
 |---|---|
 | DOCKER-001 | Base images come from registries in `data/docker.yaml` |
 | DOCKER-002 | Base images do not use `:latest` or an untagged reference |
+| DOCKER-003 | The final image stage declares a non-root `USER` |
 
 **Helm** (`policy/helm`) — evaluated against `Chart.yaml`:
 

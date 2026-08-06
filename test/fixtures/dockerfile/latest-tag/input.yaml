@@ -5,3 +5,9 @@
   Stage: 0
   SubCmd: ""
   Value: [registry.example.com/base:latest]
+- Cmd: user
+  Flags: []
+  JSON: false
+  Stage: 0
+  SubCmd: ""
+  Value: [1000]

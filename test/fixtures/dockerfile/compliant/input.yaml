@@ -25,3 +25,9 @@
   Stage: 2
   SubCmd: ""
   Value: [ghcr.io/acme/runtime:2.0.0]
+- Cmd: user
+  Flags: []
+  JSON: false
+  Stage: 2
+  SubCmd: ""
+  Value: [1000]

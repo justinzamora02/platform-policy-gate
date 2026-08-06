@@ -85,6 +85,51 @@ deny contains msg if {
 	)
 }
 
+# DOCKER-003: the final image stage must not inherit the daemon's root user.
+# Only the last USER instruction in that stage matters because Docker applies
+# instructions in order.
+final_stage := max({instruction.Stage | some instruction in input; instruction.Cmd == "from"}) if is_dockerfile
+
+final_user := value if {
+	some index, instruction in input
+	instruction.Cmd == "user"
+	instruction.Stage == final_stage
+	value := instruction.Value[0]
+	not later_user(index)
+}
+
+later_user(index) if {
+	some later, instruction in input
+	later > index
+	instruction.Cmd == "user"
+	instruction.Stage == final_stage
+}
+
+deny contains msg if {
+	is_dockerfile
+	not final_user
+
+	msg := finding(
+		"DOCKER-003",
+		"high",
+		final_stage,
+		"final image stage does not declare a non-root USER",
+	)
+}
+
+deny contains msg if {
+	is_dockerfile
+	user := lower(split(sprintf("%v", [final_user]), ":")[0])
+	user in {"root", "0"}
+
+	msg := finding(
+		"DOCKER-003",
+		"high",
+		final_stage,
+		sprintf("final image stage runs as root user %q", [final_user]),
+	)
+}
+
 # DOCKER-002: `latest` is mutable even when the registry is trusted.
 deny contains msg if {
 	some stage in external_stages
