@@ -36,9 +36,13 @@ jobs:
       - name: Enforce our own policies on this repo (GHA-001-003, REPO-001-002)
         run: make self-check
 
-      # Same entry point a reviewer runs locally: formatting, strict type
-      # check, `opa test`, `conftest verify`, the rule-coverage gate — which
-      # fails the job rather than let a rule reach master with no test that
-      # trips it — and the self-enforcement check above.
-      - name: Format, type-check, test, rule coverage
-        run: make check
+      - name: Format and type-check
+        run: |
+          opa fmt --fail --list policy/
+          opa check --strict policy/
+
+      - name: Unit tests
+        run: make test
+
+      - name: Rule coverage
+        run: make coverage
