@@ -93,3 +93,49 @@ deny contains msg if {
 drops_all_capabilities(container) if {
 	"ALL" in object.get(container, ["securityContext", "capabilities", "drop"], [])
 }
+
+# The allowlist K8S-013 checks against, from data/k8s.yaml. The comprehension is
+# load-bearing for the same reason it is in images.rego: a direct `not capability
+# in data...` test approves every addition when that data never loaded.
+allowed_capabilities := {capability | some capability in data.k8s.allowed_capabilities}
+
+# The capabilities a container adds that are not on the allowlist. A set rather
+# than a boolean, so one finding can name every one of them. Names are compared
+# exactly, as Kubernetes compares them: `sys_admin` is not `SYS_ADMIN`, and is
+# denied for being off the list rather than normalised onto it.
+disallowed_capabilities(container) := {capability |
+	some capability in object.get(container, ["securityContext", "capabilities", "add"], [])
+	not capability in allowed_capabilities
+}
+
+# K8S-013: capabilities added back must be on the allowlist. K8S-009 judges the
+# drop alone, so `drop: [ALL]` with `add: [SYS_ADMIN]` satisfies it while handing
+# the container most of root back. Container-only, same as K8S-009.
+deny contains msg if {
+	some container in lib.containers
+	disallowed := disallowed_capabilities(container)
+	count(disallowed) > 0
+
+	msg := lib.container_finding(
+		"K8S-013",
+		"high",
+		container,
+		sprintf("container %q adds capability %s", [container.name, concat(", ", sort(disallowed))]),
+	)
+}
+
+# K8S-014: containers must not bind a host port. A hostPort publishes on the
+# node's network namespace, which NetworkPolicy does not govern. `hostPort: 0`
+# is what the API server treats as unset, so it is not a binding.
+deny contains msg if {
+	some container in lib.containers
+	some port in container.ports
+	port.hostPort != 0
+
+	msg := lib.container_finding(
+		"K8S-014",
+		"high",
+		container,
+		sprintf("container %q binds hostPort %v", [container.name, port.hostPort]),
+	)
+}

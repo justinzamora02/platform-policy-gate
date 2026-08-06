@@ -1,0 +1,42 @@
+# K8S-013 fail fixture: the bypass K8S-009 leaves open.
+#
+# `app` drops the full set and then adds SYS_ADMIN and NET_RAW back, which
+# satisfies K8S-009 and every other rule in the package. `init` adds only
+# NET_BIND_SERVICE and must stay clean, or the allowlist is not a list.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: adds-capability-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+  initContainers:
+    - name: init
+      image: registry.example.com/init:1.0.0
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+          add: [NET_BIND_SERVICE]
+  containers:
+    - name: app
+      image: registry.example.com/app:1.0.0
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+          add: [SYS_ADMIN, NET_RAW]

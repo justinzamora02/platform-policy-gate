@@ -16,3 +16,11 @@ k8s:
   approved_registries:
     - registry.example.com
     - ghcr.io
+
+  # K8S-013: capabilities a container may add back on top of `drop: [ALL]`.
+  #
+  # NET_BIND_SERVICE is the only addition Pod Security Standards `restricted`
+  # permits, and everything absent here is denied — `SYS_ADMIN` most of all,
+  # which is close enough to root that adding it undoes K8S-009 entirely.
+  allowed_capabilities:
+    - NET_BIND_SERVICE
