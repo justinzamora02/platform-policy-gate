@@ -27,6 +27,7 @@ test_gha_001_ignores_local_actions if {
 test_gha_001_denies_unpinned_reusable_workflow_call if {
 	workflow := {
 		"on": {"pull_request": null},
+		"permissions": {},
 		"jobs": {"call": {"uses": "actions/checkout@v5"}},
 	}
 	ids(workflow) == {"GHA-001"}
@@ -80,6 +81,7 @@ test_gha_003_denies_unapproved_label_beside_an_approved_one if {
 test_gha_003_reads_labels_from_a_runner_group if {
 	workflow := {
 		"on": {"pull_request": null},
+		"permissions": {},
 		"jobs": {"build": {
 			"runs-on": {"group": "default", "labels": ["self-hosted"]},
 			"steps": [],
@@ -131,7 +133,27 @@ test_messages_are_structured if {
 	is_string(msg.msg)
 }
 
+# --- GHA-004 --------------------------------------------------------------
+
+test_gha_004_denies_missing_permissions if {
+	workflow := object.remove(workflow_with_step({"run": "echo ok"}), ["permissions"])
+	some msg in github.deny with input as workflow
+	msg.id == "GHA-004"
+}
+
+test_gha_004_denies_write_all if {
+	workflow := object.union(workflow_with_step({"run": "echo ok"}), {"permissions": "write-all"})
+	some msg in github.deny with input as workflow
+	msg.id == "GHA-004"
+}
+
+test_gha_004_allows_explicit_permissions_map if {
+	workflow := object.union(workflow_with_step({"run": "echo ok"}), {"permissions": {"contents": "read"}})
+	not "GHA-004" in {msg.id | some msg in github.deny with input as workflow}
+}
+
 workflow_with_step(step) := {
 	"on": {"pull_request": null},
+	"permissions": {},
 	"jobs": {"build": {"runs-on": "ubuntu-latest", "steps": [step]}},
 }

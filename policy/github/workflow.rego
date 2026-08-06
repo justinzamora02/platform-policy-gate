@@ -1,5 +1,10 @@
 # GitHub Actions workflow policies. Input is a single workflow document from
 # `.github/workflows/`.
+#
+# Zizmor owns the deeper analysis — template injection, artifact poisoning,
+# dangerous triggers. The `permissions:` block (GHA-004) is owned here instead:
+# it is decidable from the file alone, and Zizmor runs `--offline` in this
+# gate. See docs/design.md § Workflow permissions.
 package github
 
 import rego.v1
@@ -130,3 +135,32 @@ runner_labels(job) := {job["runs-on"]} if is_string(job["runs-on"])
 runner_labels(job) := {label | some label in job["runs-on"]} if is_array(job["runs-on"])
 
 runner_labels(job) := {label | some label in job["runs-on"].labels} if is_object(job["runs-on"])
+
+# GHA-004: implicit permissions are broader than a workflow's reviewed intent,
+# and `write-all` grants every available token scope. Require an explicit map;
+# individual write scopes remain reviewable because some workflows need them.
+deny contains msg if {
+	is_workflow
+	not input.permissions
+
+	msg := {
+		"id": "GHA-004",
+		"severity": "high",
+		"enforcement": "deny",
+		"resource": "permissions",
+		"msg": "workflow must declare an explicit permissions block",
+	}
+}
+
+deny contains msg if {
+	is_workflow
+	input.permissions == "write-all"
+
+	msg := {
+		"id": "GHA-004",
+		"severity": "high",
+		"enforcement": "deny",
+		"resource": "permissions",
+		"msg": "workflow must not grant permissions: write-all",
+	}
+}
