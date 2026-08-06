@@ -8,6 +8,20 @@ rendered Helm output, Dockerfiles, and CI workflows.
 - [docs/production-gap.md](docs/production-gap.md) — what this demo does not do
 - [contribution.md](contribution.md) — how to contribute
 
+### Local commit gate
+
+Enable the versioned Git hook once per clone:
+
+```sh
+./setup.sh
+```
+
+This configures `core.hooksPath`, verifies the required tools, and runs the
+first check. The `pre-commit` hook then runs `make check` and blocks commits
+when the check fails. CI remains the authoritative gate for commits made
+without the local hook; configure GitHub branch protection to require the
+`test / policy-tests` check on `master`.
+
 ## Using it from another repository
 
 `.github/workflows/policy-check.yml` is a reusable workflow. It checks out the
