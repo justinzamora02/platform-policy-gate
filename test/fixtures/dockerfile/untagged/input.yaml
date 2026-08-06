@@ -6,3 +6,9 @@
   Stage: 0
   SubCmd: ""
   Value: [registry.example.com/base]
+- Cmd: user
+  Flags: []
+  JSON: false
+  Stage: 0
+  SubCmd: ""
+  Value: [1000]

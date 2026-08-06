@@ -41,7 +41,28 @@ test_docker_002_denies_untagged_images if {
 }
 
 test_docker_002_allows_digest_pins if {
-	dockerfile_input := [from("registry.example.com/base@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", 0)]
+	dockerfile_input := [from("registry.example.com/base@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", 0), user("1000", 0)]
+	ids(dockerfile_input) == set()
+}
+
+# --- DOCKER-003 -----------------------------------------------------------
+
+test_docker_003_denies_a_missing_final_user if {
+	ids([from("registry.example.com/base:1.0", 0)]) == {"DOCKER-003"}
+}
+
+test_docker_003_denies_root_in_the_final_stage if {
+	dockerfile_input := [from("registry.example.com/base:1.0", 0), user("root", 0)]
+	ids(dockerfile_input) == {"DOCKER-003"}
+}
+
+test_docker_003_allows_a_non_root_final_user if {
+	dockerfile_input := [from("registry.example.com/base:1.0", 0), user("1000", 0)]
+	ids(dockerfile_input) == set()
+}
+
+test_docker_003_uses_the_last_user_in_the_final_stage if {
+	dockerfile_input := [from("registry.example.com/base:1.0", 0), user("root", 0), user("1000", 0)]
 	ids(dockerfile_input) == set()
 }
 
@@ -79,4 +100,13 @@ from(image, stage) := {
 	"Stage": stage,
 	"SubCmd": "",
 	"Value": [image],
+}
+
+user(value, stage) := {
+	"Cmd": "user",
+	"Flags": [],
+	"JSON": false,
+	"Stage": stage,
+	"SubCmd": "",
+	"Value": [value],
 }
