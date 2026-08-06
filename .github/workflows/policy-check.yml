@@ -74,7 +74,7 @@ jobs:
       has_charts: ${{ steps.charts.outputs.has_charts }}
     steps:
       - name: Check out the calling repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           persist-credentials: false
 
@@ -135,12 +135,12 @@ jobs:
       matrix: ${{ fromJSON(needs.discover-helm.outputs.matrix) }}
     steps:
       - name: Check out the calling repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           persist-credentials: false
 
       - name: Check out the policies
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           repository: ${{ inputs.policy-repository }}
           ref: ${{ inputs.policy-ref }}
@@ -240,14 +240,14 @@ jobs:
       # `persist-credentials: false` keeps the caller's token out of
       # `.git/config`, where any later step could read it.
       - name: Check out the calling repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           persist-credentials: false
 
       # Dotted path, so the policies cannot themselves be picked up as manifests
       # when a caller points `manifest-paths` at `.`.
       - name: Check out the policies
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           repository: ${{ inputs.policy-repository }}
           ref: ${{ inputs.policy-ref }}
@@ -308,12 +308,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the calling repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           persist-credentials: false
 
       - name: Check out the policies
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           repository: ${{ inputs.policy-repository }}
           ref: ${{ inputs.policy-ref }}
@@ -351,7 +351,7 @@ jobs:
       has_dockerfiles: ${{ steps.find.outputs.has_dockerfiles }}
     steps:
       - name: Check out the calling repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           persist-credentials: false
 
@@ -374,12 +374,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the calling repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           persist-credentials: false
 
       - name: Check out the policies
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           repository: ${{ inputs.policy-repository }}
           ref: ${{ inputs.policy-ref }}
@@ -418,12 +418,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the calling repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           persist-credentials: false
 
       - name: Check out the policies
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           repository: ${{ inputs.policy-repository }}
           ref: ${{ inputs.policy-ref }}
@@ -474,13 +474,13 @@ jobs:
       # Needed to apply the calling repository's exceptions file, at the same
       # path the `exceptions` job validated.
       - name: Check out the calling repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           persist-credentials: false
 
       # For scripts/aggregate-findings.sh and scripts/apply-exceptions.sh.
       - name: Check out the policies
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           repository: ${{ inputs.policy-repository }}
           ref: ${{ inputs.policy-ref }}
