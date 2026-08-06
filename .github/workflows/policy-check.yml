@@ -522,4 +522,4 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           files=(findings/*/findings.json)
-          ./scripts/aggregate-findings.sh "${files[@]}"
+          .policy-gate/scripts/aggregate-findings.sh "${files[@]}"
