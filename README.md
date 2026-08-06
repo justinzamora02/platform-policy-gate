@@ -81,6 +81,25 @@ disqualify the entry *and* emit their own `deny`, so a lapsed exception blocks
 the run rather than quietly ceasing to suppress. See
 [docs/design.md § Exceptions](docs/design.md#exceptions).
 
+## Releasing
+
+`.github/workflows/release.yml` is triggered by hand — Actions → release → Run
+workflow, from `master`, with a version like `v1.2.0`. It re-runs `make
+self-check` and `make check` on the selected commit, then creates the tag and
+the GitHub release in one `gh release create`.
+
+There is no floating `v1` alias, and the workflow refuses a version whose tag
+already exists. A tag is the unit of distribution: consumers pin `policy-ref`
+to one, and the argument for `policy-ref` having no default — a rule added here
+must not change a caller's verdict without a commit on the caller's side —
+holds only while the tag they pinned stays on the commit that was reviewed.
+Upgrading is therefore an explicit bump of both refs in the caller's workflow.
+
+Releases are cut from `master` only. Both that and the version format are shell
+checks rather than a job-level `if`, because a skipped job reports green, and a
+release workflow that can report green without releasing anything is worse than
+one that fails.
+
 ## Layout
 
 ```
