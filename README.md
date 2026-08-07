@@ -128,6 +128,19 @@ See
 | HELM-002 | Description declared |
 | HELM-003 | Version is valid semantic versioning |
 
+**Node.js** (`policy/node`) — root `package.json` projects only:
+
+| ID | Rule |
+|---|---|
+| NODE-001 | `packageManager` declares an exact pnpm version |
+| NODE-002 | `engines.node` selects an approved Node.js LTS line (`data/node.yaml`) |
+| NODE-003 | `pnpm-lock.yaml` is present at the repository root |
+| NODE-004 | Competing npm, Yarn, or Bun lockfiles are absent |
+
+Node policy intentionally accepts only canonical single-major constraints; it
+does not implement npm's full semver-range grammar. The approved LTS list must
+be updated deliberately as Node release lines change.
+
 **Repo hygiene** (`policy/repo`):
 
 | ID | Rule |

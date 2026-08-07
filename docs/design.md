@@ -12,6 +12,7 @@ nothing tells you it never really ran.
 - [GitHub Actions parsing](#github-actions-parsing)
 - [Dockerfile scope](#dockerfile-scope)
 - [Document guards](#document-guards)
+- [Node.js policy](#nodejs-policy)
 - [Exceptions](#exceptions)
 
 ## Finding shape
@@ -194,6 +195,19 @@ The `repo` guard is the one that has to be repeated per rule: `not has_license`
 succeeds for every document that lacks `files`, so without the guard every
 workflow and rendered manifest Conftest sees would be reported as a missing
 LICENSE.
+
+## Node.js policy
+
+The Node package reads a generated root inventory because Conftest evaluates
+one document at a time. A repository is in scope only when the inventory
+identifies the root `package.json`; nested workspace packages are not inferred.
+The inventory includes the selected manifest fields and root tracked files, so
+the policy can check package-manager and lockfile consistency together.
+
+`NODE-002` accepts only exact canonical constraints listed in `data/node.yaml`.
+OPA does not provide npm's complete range-satisfaction semantics, so regex-based
+interpretation of values such as `>=22 <25` would be misleading. Update the
+approved list when the Node release schedule changes.
 
 ## Exceptions
 
