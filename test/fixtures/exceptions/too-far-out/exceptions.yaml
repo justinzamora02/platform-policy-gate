@@ -1,0 +1,6 @@
+exceptions:
+  - id: K8S-001
+    owner: platform
+    ticket: SEC-123
+    reason: temporary compatibility exception
+    expires: "2026-12-31"

@@ -3,4 +3,4 @@ exceptions:
     owner: platform-team
     ticket: JIRA-123
     reason: blanket suppression
-    expires: "2099-12-31"
+    expires: "2026-10-31"
