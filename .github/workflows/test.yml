@@ -21,9 +21,13 @@ jobs:
       - name: Install conftest
         env:
           CONFTEST_VERSION: 0.68.2
+          CONFTEST_SHA256: e8144c6d6d2ae0260b869caa60c7c262a1f95ac63ec1e5d2fb19be452d606347
         run: |
+          set -euo pipefail
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin conftest
+            -o "$RUNNER_TEMP/conftest.tar.gz"
+          echo "${CONFTEST_SHA256}  $RUNNER_TEMP/conftest.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/conftest.tar.gz" -C /usr/local/bin conftest
 
       # `make check` runs this too, so in the passing case it runs twice — a
       # second under a second. It is a step of its own, and it is first,
