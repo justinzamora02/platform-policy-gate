@@ -25,7 +25,7 @@ without the local hook; configure GitHub branch protection to require the
 ## Using it from another repository
 
 `.github/workflows/policy-check.yml` is a reusable workflow. It checks out the
-caller, checks out this repository at the ref the caller pins, and evaluates the
+caller, checks out the policy source at the reusable workflow's pinned commit, and evaluates the
 caller's Kubernetes manifests and locally rendered Helm charts (Conftest),
 workflows (Conftest + [Zizmor](https://docs.zizmor.sh/)), and Dockerfiles
 (Conftest + [Hadolint](https://github.com/hadolint/hadolint)).
@@ -41,14 +41,11 @@ jobs:
     uses: justinzamora02/platform-policy-gate/.github/workflows/policy-check.yml@c215e7e59ff45a3143b7e42e955c3c10046ef9a5 # master — no v1 tag published yet
     with:
       manifest-paths: manifests
-      policy-ref: c215e7e59ff45a3143b7e42e955c3c10046ef9a5 # master — no v1 tag published yet
 ```
 
 | Input | Required | Default | Purpose |
 |---|---|---|---|
 | `manifest-paths` | no | `manifests` | Whitespace-separated files or directories to scan, walked recursively. No glob expansion, and no paths containing spaces. |
-| `policy-ref` | **yes** | — | Ref of this repository to evaluate against. No default, so a rule added here can never change a caller's verdict without a commit. |
-| `policy-repository` | no | `justinzamora02/platform-policy-gate` | Override to test policy changes from a fork. |
 | `fail-on-warn` | no | `false` | Also fail on `warn` findings, for rules still inside their grace period. |
 | `exceptions-file` | no | `.platform-policy-exceptions.yaml` | Path to a policy-exceptions file. Absent suppresses nothing and is not an error; present-but-invalid fails closed as `deny`. |
 

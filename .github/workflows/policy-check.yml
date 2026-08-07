@@ -20,25 +20,6 @@ on:
         required: false
         default: manifests
 
-      policy-ref:
-        description: >-
-          Ref of platform-policy-gate to evaluate against — a tag or a full
-          commit SHA. Required with no default on purpose: policy is versioned
-          input to the caller's build, and a floating default would let a rule
-          added here turn a caller's green check red without a commit on either
-          side.
-        type: string
-        required: true
-
-      policy-repository:
-        description: >-
-          Repository holding the policies, as `owner/repo`. Overridable so a
-          fork can test policy changes against its own callers before they are
-          merged upstream.
-        type: string
-        required: false
-        default: justinzamora02/platform-policy-gate
-
       fail-on-warn:
         description: >-
           Fail the job on `warn` findings as well as `deny`. Default false, so
@@ -142,8 +123,8 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
@@ -158,10 +139,13 @@ jobs:
       - name: Install conftest
         env:
           CONFTEST_VERSION: 0.68.2
+          CONFTEST_SHA256: e8144c6d6d2ae0260b869caa60c7c262a1f95ac63ec1e5d2fb19be452d606347
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin conftest
+            -o "$RUNNER_TEMP/conftest.tar.gz"
+          echo "${CONFTEST_SHA256}  $RUNNER_TEMP/conftest.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/conftest.tar.gz" -C /usr/local/bin conftest
 
       # Matrix values reach the shell through env so a caller-controlled path
       # cannot close a quote and execute on the runner.
@@ -182,9 +166,6 @@ jobs:
 
           helm lint "${helm_args[@]}"
 
-      # pipefail is load-bearing: without it a failed render is hidden by
-      # Conftest successfully evaluating an empty stream. `|| true` because this
-      # leg reports findings and only `aggregate` gates.
       - name: Conftest — rendered Helm chart
         env:
           CHART_PATH: ${{ matrix.chart }}
@@ -201,15 +182,23 @@ jobs:
             helm_args+=(--values "\"$values_csv\"")
           fi
 
-          helm template policy-check "${helm_args[@]}" \
-            | conftest test \
-              --policy .policy-gate/policy \
-              --data .policy-gate/data \
-              --namespace kubernetes \
-              --output json \
-              - >raw.json || true
+          helm template policy-check "${helm_args[@]}" >rendered.yaml
 
-          jq empty raw.json
+          set +e
+          conftest test \
+            --policy .policy-gate/policy \
+            --data .policy-gate/data \
+            --namespace kubernetes \
+            --output json \
+            rendered.yaml >raw.json
+          conftest_status=$?
+          set -e
+          case "$conftest_status" in
+            0|1) ;;
+            *) exit "$conftest_status" ;;
+          esac
+
+          jq -e 'type == "array"' raw.json >/dev/null
           .policy-gate/scripts/normalize-conftest.sh raw.json >findings.json
 
       - name: Upload findings
@@ -249,8 +238,8 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
@@ -259,10 +248,13 @@ jobs:
       - name: Install conftest
         env:
           CONFTEST_VERSION: 0.68.2
+          CONFTEST_SHA256: e8144c6d6d2ae0260b869caa60c7c262a1f95ac63ec1e5d2fb19be452d606347
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin conftest
+            -o "$RUNNER_TEMP/conftest.tar.gz"
+          echo "${CONFTEST_SHA256}  $RUNNER_TEMP/conftest.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/conftest.tar.gz" -C /usr/local/bin conftest
 
       # Caller-controlled inputs reach the shell through `env`, never through
       # `${{ }}` inside the script body: inlined expansion would let
@@ -277,6 +269,18 @@ jobs:
           # Word-split once, deliberately, then quote every element. Paths with
           # spaces are unsupported for that reason and the docs say so.
           read -ra paths <<<"$MANIFEST_PATHS"
+          if [ "${#paths[@]}" -eq 0 ]; then
+            echo '::error::manifest-paths must not be empty'
+            exit 1
+          fi
+          for path in "${paths[@]}"; do
+            case "$path" in
+              -*)
+                echo "::error::manifest-paths must not start with an option: $path"
+                exit 1
+                ;;
+            esac
+          done
 
           # Both flags are load-bearing: Conftest defaults to the empty `main`
           # namespace, and K8S-006 comprehends over its allowlist, so a missing
@@ -286,7 +290,7 @@ jobs:
             --data .policy-gate/data \
             --namespace kubernetes \
             --output json \
-            "${paths[@]}" >raw.json || true
+            -- "${paths[@]}" >raw.json || true
 
           # A bad `manifest-paths` makes Conftest emit no JSON rather than `[]`,
           # which is the only way to tell "no findings" from "nothing was
@@ -315,18 +319,21 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
       - name: Install Zizmor
         env:
           ZIZMOR_VERSION: 1.28.0
+          ZIZMOR_SHA256: e87b67160194884e375a46a12c57ccc904f762b53845f254fab7f17d98809c09
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/zizmor-x86_64-unknown-linux-gnu.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin zizmor
+            -o "$RUNNER_TEMP/zizmor.tar.gz"
+          echo "${ZIZMOR_SHA256}  $RUNNER_TEMP/zizmor.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/zizmor.tar.gz" -C /usr/local/bin zizmor
 
       # `--offline` because this job carries no GitHub token, and a caller's
       # check should not depend on network reachability at audit time.
@@ -381,19 +388,21 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
       - name: Install Hadolint
         env:
           HADOLINT_VERSION: 2.12.0
+          HADOLINT_SHA256: 56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" \
-            -o /usr/local/bin/hadolint
-          chmod +x /usr/local/bin/hadolint
+            -o "$RUNNER_TEMP/hadolint"
+          echo "${HADOLINT_SHA256}  $RUNNER_TEMP/hadolint" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/hadolint" /usr/local/bin/hadolint
 
       - name: Hadolint
         run: |
@@ -425,18 +434,21 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
       - name: Install conftest
         env:
           CONFTEST_VERSION: 0.68.2
+          CONFTEST_SHA256: e8144c6d6d2ae0260b869caa60c7c262a1f95ac63ec1e5d2fb19be452d606347
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin conftest
+            -o "$RUNNER_TEMP/conftest.tar.gz"
+          echo "${CONFTEST_SHA256}  $RUNNER_TEMP/conftest.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/conftest.tar.gz" -C /usr/local/bin conftest
 
       - name: Conftest — Dockerfiles
         run: |
@@ -472,18 +484,21 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
       - name: Install conftest
         env:
           CONFTEST_VERSION: 0.68.2
+          CONFTEST_SHA256: e8144c6d6d2ae0260b869caa60c7c262a1f95ac63ec1e5d2fb19be452d606347
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin conftest
+            -o "$RUNNER_TEMP/conftest.tar.gz"
+          echo "${CONFTEST_SHA256}  $RUNNER_TEMP/conftest.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/conftest.tar.gz" -C /usr/local/bin conftest
 
       - name: Conftest — GitHub workflows
         run: |
@@ -518,18 +533,21 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
       - name: Install conftest
         env:
           CONFTEST_VERSION: 0.68.2
+          CONFTEST_SHA256: e8144c6d6d2ae0260b869caa60c7c262a1f95ac63ec1e5d2fb19be452d606347
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin conftest
+            -o "$RUNNER_TEMP/conftest.tar.gz"
+          echo "${CONFTEST_SHA256}  $RUNNER_TEMP/conftest.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/conftest.tar.gz" -C /usr/local/bin conftest
 
       - name: Conftest — repo hygiene
         run: |
@@ -563,18 +581,21 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
       - name: Install conftest
         env:
           CONFTEST_VERSION: 0.68.2
+          CONFTEST_SHA256: e8144c6d6d2ae0260b869caa60c7c262a1f95ac63ec1e5d2fb19be452d606347
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin conftest
+            -o "$RUNNER_TEMP/conftest.tar.gz"
+          echo "${CONFTEST_SHA256}  $RUNNER_TEMP/conftest.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/conftest.tar.gz" -C /usr/local/bin conftest
 
       - name: Conftest — Node.js
         run: |
@@ -611,18 +632,21 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
       - name: Install conftest
         env:
           CONFTEST_VERSION: 0.68.2
+          CONFTEST_SHA256: e8144c6d6d2ae0260b869caa60c7c262a1f95ac63ec1e5d2fb19be452d606347
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin conftest
+            -o "$RUNNER_TEMP/conftest.tar.gz"
+          echo "${CONFTEST_SHA256}  $RUNNER_TEMP/conftest.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/conftest.tar.gz" -C /usr/local/bin conftest
 
       - name: Conftest — policy exceptions
         env:
@@ -656,6 +680,7 @@ jobs:
     needs:
       [
         kubernetes,
+        discover-helm,
         helm,
         no-helm-charts,
         zizmor,
@@ -681,8 +706,8 @@ jobs:
       - name: Check out the policies
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
-          repository: ${{ inputs.policy-repository }}
-          ref: ${{ inputs.policy-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .policy-gate
           persist-credentials: false
 
@@ -694,8 +719,6 @@ jobs:
         env:
           JOB_STATUSES: >-
             ${{ needs.kubernetes.result }}
-            ${{ needs.helm.result }}
-            ${{ needs.no-helm-charts.result }}
             ${{ needs.zizmor.result }}
             ${{ needs.discover-dockerfiles.result }}
             ${{ needs.hadolint.result }}
@@ -704,17 +727,32 @@ jobs:
             ${{ needs.repo-hygiene.result }}
             ${{ needs.node.result }}
             ${{ needs.exceptions.result }}
+          DISCOVER_HELM_STATUS: ${{ needs.discover-helm.result }}
+          HELM_STATUSES: >-
+            ${{ needs.helm.result }}
+            ${{ needs.no-helm-charts.result }}
         run: |
           set -euo pipefail
+          if [ "$DISCOVER_HELM_STATUS" != "success" ]; then
+            echo "::error::Helm discovery ended with status: $DISCOVER_HELM_STATUS"
+            exit 1
+          fi
           for status in $JOB_STATUSES; do
             case "$status" in
               success|skipped) ;;
               *)
                 echo "::error::A policy leg ended with status: $status"
                 exit 1
-                ;;
+              ;;
             esac
           done
+          case "$HELM_STATUSES" in
+            "success skipped"|"skipped success") ;;
+            *)
+              echo "::error::Expected exactly one Helm path to succeed, got: $HELM_STATUSES"
+              exit 1
+              ;;
+          esac
 
       - name: Download findings
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

@@ -7,6 +7,8 @@ CONFTEST="${CONFTEST:-conftest}"
 # Repo-relative paths, so a run from a subdirectory checks the same tree.
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+./scripts/check-workflow-hardening.sh
+
 # The inventory is an artifact of the working tree, not a source file, so it
 # never lands where `git add -A` could stage it.
 work="$(mktemp -d)"
