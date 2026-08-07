@@ -1,12 +1,10 @@
-# Traversal fixture: PodSpec one template down.
-apiVersion: apps/v1
-kind: DaemonSet
+apiVersion: v1
+kind: ReplicationController
 metadata:
-  name: compliant-daemonset
+  name: compliant-replicationcontroller
 spec:
   selector:
-    matchLabels:
-      app: compliant
+    app: compliant
   template:
     metadata:
       labels:
@@ -27,7 +25,6 @@ spec:
               memory: 128Mi
           securityContext:
             readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
       containers:
@@ -42,6 +39,5 @@ spec:
               memory: 256Mi
           securityContext:
             readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]

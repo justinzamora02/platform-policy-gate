@@ -1,0 +1,14 @@
+# GHA-003 fail fixture: object-form labels may be a scalar, not just a list.
+name: build
+on:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on:
+      group: private-runners
+      labels: self-hosted
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0

@@ -8,7 +8,7 @@ import rego.v1
 # ConfigMaps rendered alongside.
 pod_spec := input.spec if input.kind == "Pod"
 
-pod_spec := input.spec.template.spec if input.kind in {"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job"}
+pod_spec := input.spec.template.spec if input.kind in {"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "ReplicationController", "Job"}
 
 pod_spec := input.spec.jobTemplate.spec.template.spec if input.kind == "CronJob"
 
@@ -58,7 +58,17 @@ image_digest(image) := digest if {
 	[_, digest] := split(image, "@")
 }
 
-resource := sprintf("%s/%s", [input.kind, input.metadata.name])
+resource := sprintf("%s/%s", [input.kind, resource_name])
+
+resource_name := name if {
+	name := object.get(input, ["metadata", "name"], "")
+	is_string(name)
+	trim_space(name) != ""
+} else := generate_name if {
+	generate_name := object.get(input, ["metadata", "generateName"], "")
+	is_string(generate_name)
+	trim_space(generate_name) != ""
+} else := "(unnamed)"
 
 # Conftest requires the human-readable text under `msg` and surfaces every other
 # key under `metadata`, which the aggregation step consumes.

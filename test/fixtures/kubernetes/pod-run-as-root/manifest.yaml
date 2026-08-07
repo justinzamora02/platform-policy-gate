@@ -5,6 +5,7 @@ kind: Pod
 metadata:
   name: run-as-root-pod
 spec:
+  automountServiceAccountToken: false
   initContainers:
     - name: init
       image: registry.example.com/init:1.0.0

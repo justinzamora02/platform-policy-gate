@@ -92,7 +92,7 @@ See
 | K8S-007 | No `:latest` and no untagged images |
 | K8S-008 | `readOnlyRootFilesystem: true` on every container |
 | K8S-009 | `capabilities.drop` must include `ALL` |
-| K8S-010 | No `automountServiceAccountToken: true` on the default ServiceAccount |
+| K8S-010 | Default ServiceAccounts explicitly set `automountServiceAccountToken: false` |
 | K8S-016 | Roles do not use wildcard API groups, resources, or verbs |
 | K8S-017 | Roles do not grant `escalate`, `bind`, or `impersonate` |
 | K8S-018 | ClusterRoles do not grant read access to core `secrets` |

@@ -84,6 +84,8 @@ core_api_group(policy_rule) if count(object.get(policy_rule, "apiGroups", [])) =
 # `roleRef.name` exactly, so this compares exactly.
 deny contains msg if {
 	input.kind in {"RoleBinding", "ClusterRoleBinding"}
+	input.roleRef.apiGroup == "rbac.authorization.k8s.io"
+	input.roleRef.kind == "ClusterRole"
 	input.roleRef.name == "cluster-admin"
 	subjects := {sprintf("%s %q", [subject.kind, subject.name]) | some subject in object.get(input, "subjects", [])}
 

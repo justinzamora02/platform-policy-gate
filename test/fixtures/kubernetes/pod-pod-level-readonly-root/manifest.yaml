@@ -10,6 +10,7 @@ kind: Pod
 metadata:
   name: pod-level-readonly-root-pod
 spec:
+  automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
     readOnlyRootFilesystem: true

@@ -22,12 +22,22 @@ test_k8s_018_denies_cluster_secret_reads if {
 }
 
 test_k8s_019_denies_cluster_admin_bindings if {
-	binding := {"kind": "RoleBinding", "metadata": {"name": "b"}, "roleRef": {"name": "cluster-admin"}, "subjects": [{"kind": "ServiceAccount", "name": "app"}]}
+	binding := {"kind": "RoleBinding", "metadata": {"name": "b"}, "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "cluster-admin"}, "subjects": [{"kind": "ServiceAccount", "name": "app"}]}
 	some msg in kubernetes.deny with input as binding
 	msg.id == "K8S-019"
 }
 
+test_k8s_019_allows_a_namespaced_role_named_cluster_admin if {
+	binding := {"kind": "RoleBinding", "metadata": {"name": "b"}, "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": "cluster-admin"}, "subjects": [{"kind": "ServiceAccount", "name": "app"}]}
+	not "K8S-019" in {msg.id | some msg in kubernetes.deny with input as binding}
+}
+
+test_k8s_019_allows_cluster_role_name_in_another_api_group if {
+	binding := {"kind": "RoleBinding", "metadata": {"name": "b"}, "roleRef": {"apiGroup": "example.com", "kind": "ClusterRole", "name": "cluster-admin"}, "subjects": [{"kind": "ServiceAccount", "name": "app"}]}
+	not "K8S-019" in {msg.id | some msg in kubernetes.deny with input as binding}
+}
+
 test_rbac_rules_ignore_workloads if {
-	findings := kubernetes.deny with input as {"kind": "Pod", "metadata": {"name": "p"}, "spec": {"containers": []}}
+	findings := kubernetes.deny with input as {"kind": "Pod", "metadata": {"name": "p"}, "spec": {"automountServiceAccountToken": false, "containers": []}}
 	count(findings) == 0
 }

@@ -90,6 +90,14 @@ test_gha_003_reads_labels_from_a_runner_group if {
 	ids(workflow) == {"GHA-003"}
 }
 
+test_gha_003_denies_group_only_runner_selector if {
+	ids(fixtures.github["runner-group-only"]) == {"GHA-003"}
+}
+
+test_gha_003_denies_unapproved_scalar_label_in_runner_group if {
+	ids(fixtures.github["runner-group-scalar-label"]) == {"GHA-003"}
+}
+
 test_gha_003_reports_the_offending_label if {
 	some msg in github.deny with input as fixtures.github["unapproved-runner"]
 	msg.runner == "self-hosted"
@@ -145,6 +153,10 @@ test_gha_004_denies_write_all if {
 	workflow := object.union(workflow_with_step({"run": "echo ok"}), {"permissions": "write-all"})
 	some msg in github.deny with input as workflow
 	msg.id == "GHA-004"
+}
+
+test_gha_004_denies_job_level_write_all if {
+	ids(fixtures.github["job-write-all"]) == {"GHA-004"}
 }
 
 test_gha_004_allows_explicit_permissions_map if {

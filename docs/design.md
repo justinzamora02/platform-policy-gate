@@ -95,12 +95,11 @@ manifest names the default SA explicitly, so a rule testing only
 `serviceAccountName == "default"` would miss nearly every pod actually bound to
 it.
 
-The rule is scoped to an explicit pod-level `automountServiceAccountToken: true`.
+The rule requires an explicit pod-level `automountServiceAccountToken: false`.
 Automount resolves from two documents — the pod spec and the ServiceAccount
 object, pod winning — and Conftest evaluates one rendered document at a time, so
-the ServiceAccount's own setting is out of reach. A pod that says nothing is
-therefore left to that setting rather than guessed at; what this rule catches is
-a manifest reaching past it to mount the token of an identity nobody scoped.
+the ServiceAccount's own setting is out of reach. A pod that says nothing must
+therefore fail closed rather than rely on an unreviewed namespace default.
 
 ## Image references
 

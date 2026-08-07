@@ -8,6 +8,7 @@ kind: Pod
 metadata:
   name: writable-root-filesystem-pod
 spec:
+  automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
   initContainers:

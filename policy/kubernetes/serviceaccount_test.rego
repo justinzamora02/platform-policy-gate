@@ -17,7 +17,7 @@ sa_pod(spec) := {
 test_k8s_010_denies_automount_on_the_implicit_default_sa if {
 	ids(fixtures.kubernetes["pod-default-sa-automount"]) == {"K8S-010"}
 
-	messages(fixtures.kubernetes["pod-default-sa-automount"], "K8S-010") == {"pod mounts the default ServiceAccount token (automountServiceAccountToken: true)"}
+	messages(fixtures.kubernetes["pod-default-sa-automount"], "K8S-010") == {"pod does not set automountServiceAccountToken: false for the default ServiceAccount"}
 }
 
 test_k8s_010_allows_automount_on_a_named_sa if {
@@ -30,6 +30,7 @@ test_k8s_010_allows_automount_on_a_named_sa if {
 test_k8s_010_recognises_every_spelling_of_the_default_sa if {
 	every spec in [
 		{"automountServiceAccountToken": true},
+		{"automountServiceAccountToken": true, "serviceAccountName": null},
 		{"automountServiceAccountToken": true, "serviceAccountName": "default"},
 		{"automountServiceAccountToken": true, "serviceAccountName": ""},
 		{"automountServiceAccountToken": true, "serviceAccount": "default"},
@@ -43,11 +44,8 @@ test_k8s_010_honours_the_deprecated_alias_when_it_names_another_sa if {
 	not "K8S-010" in ids(sa_pod({"automountServiceAccountToken": true, "serviceAccount": "reconciler"}))
 }
 
-# Silence on omission is the deliberate scope, not an oversight: automount also
-# resolves from the ServiceAccount object, which is a different document than
-# the one Conftest has in hand, so this rule has nothing to judge here.
-test_k8s_010_is_silent_when_the_pod_does_not_set_automount if {
-	not "K8S-010" in ids(sa_pod({"containers": [{"name": "app"}]}))
+test_k8s_010_denies_default_sa_when_automount_is_omitted if {
+	"K8S-010" in ids(sa_pod({"containers": [{"name": "app"}]}))
 }
 
 test_k8s_010_allows_automount_turned_off if {

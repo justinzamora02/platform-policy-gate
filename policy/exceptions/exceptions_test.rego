@@ -5,16 +5,48 @@ import data.fixtures
 import rego.v1
 
 ids(fixture) := out if {
-	msgs := exceptions.deny with input as fixture
+	msgs := exceptions.deny with input as fixture with time.now_ns as frozen_now_ns
 	out := {msg.id | some msg in msgs}
 }
+
+active(fixture) := out if {
+	out := exceptions.active with input as fixture with time.now_ns as frozen_now_ns
+}
+
+frozen_now_ns := time.parse_ns("2006-01-02", "2026-08-01")
 
 test_valid_exception_has_no_findings if {
 	ids(fixtures.exceptions.valid) == set()
 }
 
 test_valid_exception_is_active if {
-	exceptions.active with input as fixtures.exceptions.valid == {fixtures.exceptions.valid.exceptions[0]}
+	active(fixtures.exceptions.valid) == {fixtures.exceptions.valid.exceptions[0]}
+}
+
+test_exc_001_denies_missing_exceptions_array if {
+	ids({}) == {"EXC-001"}
+}
+
+test_exc_001_denies_scalar_root if {
+	ids("not-an-exceptions-file") == {"EXC-001"}
+}
+
+test_exc_001_denies_non_array_exceptions if {
+	ids({"exceptions": {}}) == {"EXC-001"}
+}
+
+test_exc_001_denies_scalar_entry if {
+	ids({"exceptions": ["K8S-006"]}) == {"EXC-001"}
+}
+
+test_exc_001_denies_blank_required_field if {
+	fixture := object.union(fixtures.exceptions.valid, {"exceptions": [object.union(fixtures.exceptions.valid.exceptions[0], {"ticket": ""})]})
+	ids(fixture) == {"EXC-001"}
+}
+
+test_exc_001_denies_whitespace_only_required_field if {
+	fixture := object.union(fixtures.exceptions.valid, {"exceptions": [object.union(fixtures.exceptions.valid.exceptions[0], {"reason": " \t"})]})
+	ids(fixture) == {"EXC-001"}
 }
 
 test_exc_001_denies_missing_required_field if {
@@ -22,7 +54,7 @@ test_exc_001_denies_missing_required_field if {
 }
 
 test_exc_001_disqualifies_the_entry_from_active if {
-	exceptions.active with input as fixtures.exceptions["missing-field"] == set()
+	active(fixtures.exceptions["missing-field"]) == set()
 }
 
 test_exc_002_denies_wildcard_id if {
@@ -30,7 +62,7 @@ test_exc_002_denies_wildcard_id if {
 }
 
 test_exc_002_disqualifies_the_entry_from_active if {
-	exceptions.active with input as fixtures.exceptions["wildcard-id"] == set()
+	active(fixtures.exceptions["wildcard-id"]) == set()
 }
 
 test_exc_003_denies_unparseable_expiry if {
@@ -38,7 +70,7 @@ test_exc_003_denies_unparseable_expiry if {
 }
 
 test_exc_003_disqualifies_the_entry_from_active if {
-	exceptions.active with input as fixtures.exceptions["bad-date-format"] == set()
+	active(fixtures.exceptions["bad-date-format"]) == set()
 }
 
 test_exc_004_denies_expired_exception if {
@@ -46,7 +78,7 @@ test_exc_004_denies_expired_exception if {
 }
 
 test_exc_004_disqualifies_the_entry_from_active if {
-	exceptions.active with input as fixtures.exceptions.expired == set()
+	active(fixtures.exceptions.expired) == set()
 }
 
 test_exc_005_denies_an_exception_more_than_90_days_out if {
@@ -54,7 +86,7 @@ test_exc_005_denies_an_exception_more_than_90_days_out if {
 }
 
 test_exc_005_disqualifies_the_entry_from_active if {
-	exceptions.active with input as fixtures.exceptions["too-far-out"] == set()
+	active(fixtures.exceptions["too-far-out"]) == set()
 }
 
 # Each entry is judged independently: one expired sibling does not disqualify
@@ -64,7 +96,7 @@ test_mixed_file_reports_only_the_bad_entry if {
 }
 
 test_mixed_file_keeps_the_valid_entry_active if {
-	exceptions.active with input as fixtures.exceptions.mixed == {fixtures.exceptions.mixed.exceptions[0]}
+	active(fixtures.exceptions.mixed) == {fixtures.exceptions.mixed.exceptions[0]}
 }
 
 test_findings_are_structured if {
@@ -73,9 +105,4 @@ test_findings_are_structured if {
 	msg.enforcement == "deny"
 	is_string(msg.resource)
 	is_string(msg.msg)
-}
-
-test_ignores_non_exceptions_documents if {
-	ids(fixtures.kubernetes["pod-compliant"]) == set()
-	ids(fixtures.repo["license-present"]) == set()
 }

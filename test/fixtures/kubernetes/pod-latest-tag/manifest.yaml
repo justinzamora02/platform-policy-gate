@@ -4,6 +4,7 @@ kind: Pod
 metadata:
   name: latest-tag-pod
 spec:
+  automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
   containers:
