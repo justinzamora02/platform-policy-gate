@@ -551,6 +551,51 @@ jobs:
           path: findings.json
           retention-days: 1
 
+  node:
+    name: Conftest — Node.js
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
+          persist-credentials: false
+
+      - name: Install conftest
+        env:
+          CONFTEST_VERSION: 0.68.2
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin conftest
+
+      - name: Conftest — Node.js
+        run: |
+          set -euo pipefail
+          .policy-gate/scripts/repo-inventory.sh . >repo-inventory.json
+          conftest test \
+            --policy .policy-gate/policy \
+            --data .policy-gate/data \
+            --namespace node \
+            --output json \
+            repo-inventory.json >raw.json || true
+          jq empty raw.json
+          .policy-gate/scripts/normalize-conftest.sh raw.json >findings.json
+
+      - name: Upload findings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: findings-node
+          path: findings.json
+          retention-days: 1
+
   exceptions:
     # A missing exceptions file is not an error; a present-but-invalid one is.
     # Validated here so it surfaces as a `deny` in the same summary as
@@ -619,6 +664,7 @@ jobs:
         dockerfile,
         github-workflows,
         repo-hygiene,
+        node,
         exceptions,
       ]
     if: always()
@@ -656,6 +702,7 @@ jobs:
             ${{ needs.dockerfile.result }}
             ${{ needs.github-workflows.result }}
             ${{ needs.repo-hygiene.result }}
+            ${{ needs.node.result }}
             ${{ needs.exceptions.result }}
         run: |
           set -euo pipefail

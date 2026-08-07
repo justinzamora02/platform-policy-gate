@@ -1,0 +1,8 @@
+kind: node-project
+path: package.json
+manifest:
+  packageManager: pnpm@9.15.4
+  engines:
+    node: 24.x
+tracked_files:
+  - package.json
