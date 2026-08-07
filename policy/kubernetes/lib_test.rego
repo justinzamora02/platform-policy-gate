@@ -20,6 +20,7 @@ test_traversal_reaches_containers_for_every_workload_kind if {
 		"statefulset",
 		"daemonset",
 		"replicaset",
+		"replicationcontroller",
 		"job",
 		"cronjob",
 	] {
@@ -110,6 +111,25 @@ test_image_digest_reads_the_pin if {
 
 test_resource_names_the_kind_and_the_object if {
 	lib.resource == "Deployment/compliant-deployment" with input as fixtures.kubernetes["deployment-compliant"]
+}
+
+test_resource_uses_generate_name_when_name_is_absent if {
+	lib.resource == "Pod/privileged-pod-" with input as fixtures.kubernetes["pod-privileged-generate-name"]
+}
+
+test_resource_uses_generate_name_when_name_is_blank_or_null if {
+	every name in ["", null] {
+		lib.resource == "Pod/generated-" with input as {"kind": "Pod", "metadata": {"name": name, "generateName": "generated-"}, "spec": {}}
+	}
+}
+
+test_resource_uses_a_stable_marker_when_name_is_absent if {
+	lib.resource == "Pod/(unnamed)" with input as {"kind": "Pod", "metadata": {}, "spec": {}}
+	lib.resource == "Pod/(unnamed)" with input as {"kind": "Pod", "spec": {}}
+
+	every generate_name in ["", null] {
+		lib.resource == "Pod/(unnamed)" with input as {"kind": "Pod", "metadata": {"generateName": generate_name}, "spec": {}}
+	}
 }
 
 test_container_finding_carries_the_container_name if {

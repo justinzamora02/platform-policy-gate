@@ -8,6 +8,7 @@ kind: Pod
 metadata:
   name: missing-resources-pod
 spec:
+  automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
   initContainers:

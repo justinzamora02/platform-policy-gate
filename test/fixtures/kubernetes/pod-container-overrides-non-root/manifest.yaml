@@ -10,6 +10,7 @@ kind: Pod
 metadata:
   name: overrides-non-root-pod
 spec:
+  automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
   containers:

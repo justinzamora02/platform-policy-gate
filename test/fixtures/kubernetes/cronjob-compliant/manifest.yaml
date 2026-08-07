@@ -11,6 +11,7 @@ spec:
     spec:
       template:
         spec:
+          automountServiceAccountToken: false
           restartPolicy: OnFailure
           securityContext:
             runAsNonRoot: true

@@ -30,6 +30,7 @@ test_compliant_workloads_are_clean if {
 		"statefulset",
 		"daemonset",
 		"replicaset",
+		"replicationcontroller",
 		"job",
 		"cronjob",
 	] {
@@ -50,6 +51,17 @@ test_k8s_001_denies_a_privileged_container if {
 
 test_k8s_001_denies_a_privileged_init_container if {
 	containers_flagged(fixtures.kubernetes["pod-privileged-init"], "K8S-001") == {"init"}
+}
+
+test_k8s_001_denies_a_privileged_pod_with_generate_name if {
+	ids(fixtures.kubernetes["pod-privileged-generate-name"]) == {"K8S-001"}
+	containers_flagged(fixtures.kubernetes["pod-privileged-generate-name"], "K8S-001") == {"app"}
+}
+
+test_k8s_001_denies_a_privileged_replication_controller if {
+	fixture := fixtures.kubernetes["replicationcontroller-privileged"]
+	containers_flagged(fixture, "K8S-001") == {"app"}
+	messages(fixture, "K8S-001") == {`container "app" runs privileged`}
 }
 
 # `privileged: false` is the common explicit case and must not be read as

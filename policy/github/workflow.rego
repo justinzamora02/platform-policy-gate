@@ -129,12 +129,43 @@ deny contains msg if {
 	}
 }
 
+# A runner group cannot be checked without a separate allowlist. Reject a
+# group-only selector instead of treating its absent labels as approved.
+deny contains msg if {
+	is_workflow
+	some job_id, job in input.jobs
+	group_only_runner(job)
+
+	msg := {
+		"id": "GHA-003",
+		"severity": "medium",
+		"enforcement": "deny",
+		"resource": sprintf("jobs.%s", [job_id]),
+		"runner": job["runs-on"].group,
+		"msg": sprintf("runner group %q cannot be approved without runner labels", [job["runs-on"].group]),
+	}
+}
+
 # `runs-on` is a string, a list of labels, or `{group, labels}`.
 runner_labels(job) := {job["runs-on"]} if is_string(job["runs-on"])
 
 runner_labels(job) := {label | some label in job["runs-on"]} if is_array(job["runs-on"])
 
-runner_labels(job) := {label | some label in job["runs-on"].labels} if is_object(job["runs-on"])
+runner_labels(job) := {label | some label in job["runs-on"].labels} if {
+	is_object(job["runs-on"])
+	is_array(job["runs-on"].labels)
+}
+
+runner_labels(job) := {job["runs-on"].labels} if {
+	is_object(job["runs-on"])
+	is_string(job["runs-on"].labels)
+}
+
+group_only_runner(job) if {
+	is_object(job["runs-on"])
+	is_string(object.get(job["runs-on"], "group", null))
+	count(object.get(job["runs-on"], "labels", [])) == 0
+}
 
 # GHA-004: implicit permissions are broader than a workflow's reviewed intent,
 # and `write-all` grants every available token scope. Require an explicit map;
@@ -162,5 +193,19 @@ deny contains msg if {
 		"enforcement": "deny",
 		"resource": "permissions",
 		"msg": "workflow must not grant permissions: write-all",
+	}
+}
+
+deny contains msg if {
+	is_workflow
+	some job_id, job in input.jobs
+	job.permissions == "write-all"
+
+	msg := {
+		"id": "GHA-004",
+		"severity": "high",
+		"enforcement": "deny",
+		"resource": sprintf("jobs.%s.permissions", [job_id]),
+		"msg": "job must not grant permissions: write-all",
 	}
 }

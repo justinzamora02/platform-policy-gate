@@ -5,6 +5,7 @@ kind: Pod
 metadata:
   name: privileged-pod
 spec:
+  automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
   containers:

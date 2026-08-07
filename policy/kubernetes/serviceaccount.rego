@@ -13,20 +13,19 @@ default_service_account if {
 		"serviceAccountName",
 		object.get(lib.pod_spec, "serviceAccount", "default"),
 	)
-	name in {"", "default"}
+	name in {null, "", "default"}
 }
 
-# K8S-010: pods on the default ServiceAccount must not mount its token. Scoped
-# to an explicit pod-level `true`, because automount also resolves from the
-# ServiceAccount object, which Conftest cannot see from a single document.
+# K8S-010: pods on the default ServiceAccount must explicitly opt out of token
+# mounting. An omitted value defaults to true at the API server.
 deny contains msg if {
-	lib.pod_spec.automountServiceAccountToken == true
 	default_service_account
+	object.get(lib.pod_spec, "automountServiceAccountToken", true) != false
 
 	msg := lib.finding(
 		"K8S-010",
 		"medium",
-		"pod mounts the default ServiceAccount token (automountServiceAccountToken: true)",
+		"pod does not set automountServiceAccountToken: false for the default ServiceAccount",
 	)
 }
 

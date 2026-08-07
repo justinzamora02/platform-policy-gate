@@ -3,4 +3,4 @@ exceptions:
   - id: K8S-006
     owner: platform-team
     reason: registry migration in progress
-    expires: "2026-10-31"
+    expires: "2026-09-30"

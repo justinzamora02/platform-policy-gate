@@ -4,6 +4,7 @@ kind: Pod
 metadata:
   name: hostpath-pod
 spec:
+  automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
   volumes:

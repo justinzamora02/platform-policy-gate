@@ -7,6 +7,7 @@ kind: Pod
 metadata:
   name: inherits-non-root-pod
 spec:
+  automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
   containers:

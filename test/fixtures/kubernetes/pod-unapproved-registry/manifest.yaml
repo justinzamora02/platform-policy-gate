@@ -8,6 +8,7 @@ kind: Pod
 metadata:
   name: unapproved-registry-pod
 spec:
+  automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
   initContainers:
