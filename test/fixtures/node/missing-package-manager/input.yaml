@@ -1,0 +1,8 @@
+kind: node-project
+path: package.json
+manifest:
+  engines:
+    node: 22.x
+tracked_files:
+  - package.json
+  - pnpm-lock.yaml

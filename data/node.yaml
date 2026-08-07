@@ -1,0 +1,4 @@
+node_policy:
+  approved_node_constraints:
+    - "22.x"
+    - "24.x"

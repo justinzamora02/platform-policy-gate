@@ -15,6 +15,10 @@ if [[ -f "$root/package.json" ]]; then
 			[inputs] as $files |
 			{
 				files: $files,
+				kind: "node-project",
+				path: "package.json",
+				manifest: $package[0],
+				tracked_files: $files,
 				node: {
 					packageManager: ($package[0].packageManager // null),
 					engines: ($package[0].engines // {}),
