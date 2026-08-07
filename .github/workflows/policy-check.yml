@@ -644,6 +644,31 @@ jobs:
         with:
           version: 1.18.2
 
+      - name: Fail if a policy leg did not complete
+        env:
+          JOB_STATUSES: >-
+            ${{ needs.kubernetes.result }}
+            ${{ needs.helm.result }}
+            ${{ needs.no-helm-charts.result }}
+            ${{ needs.zizmor.result }}
+            ${{ needs.discover-dockerfiles.result }}
+            ${{ needs.hadolint.result }}
+            ${{ needs.dockerfile.result }}
+            ${{ needs.github-workflows.result }}
+            ${{ needs.repo-hygiene.result }}
+            ${{ needs.exceptions.result }}
+        run: |
+          set -euo pipefail
+          for status in $JOB_STATUSES; do
+            case "$status" in
+              success|skipped) ;;
+              *)
+                echo "::error::A policy leg ended with status: $status"
+                exit 1
+                ;;
+            esac
+          done
+
       - name: Download findings
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
