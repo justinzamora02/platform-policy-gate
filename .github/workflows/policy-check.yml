@@ -410,6 +410,147 @@ jobs:
           path: findings.json
           retention-days: 1
 
+  dockerfile:
+    # DOCKER-001/002/003 own the FROM instruction; Hadolint owns the rest.
+    name: Conftest — Dockerfiles
+    needs: discover-dockerfiles
+    if: needs.discover-dockerfiles.outputs.has_dockerfiles == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
+          persist-credentials: false
+
+      - name: Install conftest
+        env:
+          CONFTEST_VERSION: 0.68.2
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin conftest
+
+      - name: Conftest — Dockerfiles
+        run: |
+          set -euo pipefail
+          mapfile -d '' -t dockerfiles < <(find . -type f -name 'Dockerfile*' -print0)
+          conftest test \
+            --policy .policy-gate/policy \
+            --data .policy-gate/data \
+            --namespace dockerfile \
+            --output json \
+            "${dockerfiles[@]}" >raw.json || true
+          jq empty raw.json
+          .policy-gate/scripts/normalize-conftest.sh raw.json >findings.json
+
+      - name: Upload findings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: findings-dockerfile
+          path: findings.json
+          retention-days: 1
+
+  github-workflows:
+    # GHA-001/002/003/004 own SHA pinning, action/runner allowlists, and
+    # explicit `permissions:`. Zizmor owns the deeper analysis.
+    name: Conftest — GitHub workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
+          persist-credentials: false
+
+      - name: Install conftest
+        env:
+          CONFTEST_VERSION: 0.68.2
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin conftest
+
+      - name: Conftest — GitHub workflows
+        run: |
+          set -euo pipefail
+          conftest test \
+            --policy .policy-gate/policy \
+            --data .policy-gate/data \
+            --namespace github \
+            --output json \
+            .github/workflows/ >raw.json || true
+          jq empty raw.json
+          .policy-gate/scripts/normalize-conftest.sh raw.json >findings.json
+
+      - name: Upload findings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: findings-github-workflows
+          path: findings.json
+          retention-days: 1
+
+  repo-hygiene:
+    # REPO-001/002 read a `{"files": [...]}` inventory of the calling
+    # repository's working tree, not a manifest.
+    name: Conftest — repo hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the policies
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          repository: ${{ inputs.policy-repository }}
+          ref: ${{ inputs.policy-ref }}
+          path: .policy-gate
+          persist-credentials: false
+
+      - name: Install conftest
+        env:
+          CONFTEST_VERSION: 0.68.2
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin conftest
+
+      - name: Conftest — repo hygiene
+        run: |
+          set -euo pipefail
+          .policy-gate/scripts/repo-inventory.sh . >repo-inventory.json
+          conftest test \
+            --policy .policy-gate/policy \
+            --data .policy-gate/data \
+            --namespace repo \
+            --output json \
+            repo-inventory.json >raw.json || true
+          jq empty raw.json
+          .policy-gate/scripts/normalize-conftest.sh raw.json >findings.json
+
+      - name: Upload findings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: findings-repo-hygiene
+          path: findings.json
+          retention-days: 1
+
   exceptions:
     # A missing exceptions file is not an error; a present-but-invalid one is.
     # Validated here so it surfaces as a `deny` in the same summary as
@@ -467,7 +608,19 @@ jobs:
     name: Aggregate findings
     # `if: always()` because `no-helm-charts` and `hadolint` legitimately skip,
     # so this has to run whether the others succeed, fail, or are skipped.
-    needs: [kubernetes, helm, no-helm-charts, zizmor, discover-dockerfiles, hadolint, exceptions]
+    needs:
+      [
+        kubernetes,
+        helm,
+        no-helm-charts,
+        zizmor,
+        discover-dockerfiles,
+        hadolint,
+        dockerfile,
+        github-workflows,
+        repo-hygiene,
+        exceptions,
+      ]
     if: always()
     runs-on: ubuntu-latest
     steps:
