@@ -1,0 +1,14 @@
+# `scratch` is Docker's empty base-image sentinel, not an image pulled from a
+# registry, so registry and tag rules must leave it alone.
+- Cmd: from
+  Flags: []
+  JSON: false
+  Stage: 0
+  SubCmd: ""
+  Value: [scratch]
+- Cmd: user
+  Flags: []
+  JSON: false
+  Stage: 0
+  SubCmd: ""
+  Value: [65532]

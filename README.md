@@ -68,12 +68,14 @@ exceptions:
     owner: platform-team
     ticket: JIRA-123
     reason: registry migration in progress
-    expires: 2026-12-31
+    expires: 2026-09-06                 # 30 days after 2026-08-07; keep within 90 days
 ```
 
 A missing field, a wildcard `id`, an unparseable date, a past `expires`, or an
 expiry more than 90 days out each disqualify the entry *and* emit their own
 `deny`, so exceptions remain short-lived and a lapsed exception blocks the run.
+Choose the example's `expires` value relative to the date the check runs; a
+fixed example date eventually becomes invalid.
 See
 [docs/design.md § Exceptions](docs/design.md#exceptions).
 
@@ -92,7 +94,8 @@ See
 | K8S-007 | No `:latest` and no untagged images |
 | K8S-008 | `readOnlyRootFilesystem: true` on every container |
 | K8S-009 | `capabilities.drop` must include `ALL` |
-| K8S-010 | Default ServiceAccounts explicitly set `automountServiceAccountToken: false` |
+| K8S-010 | No `automountServiceAccountToken: true` on the default ServiceAccount |
+| K8S-015 | ServiceAccounts set `automountServiceAccountToken: false` |
 | K8S-016 | Roles do not use wildcard API groups, resources, or verbs |
 | K8S-017 | Roles do not grant `escalate`, `bind`, or `impersonate` |
 | K8S-018 | ClusterRoles do not grant read access to core `secrets` |

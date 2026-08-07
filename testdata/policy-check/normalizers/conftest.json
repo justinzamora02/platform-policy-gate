@@ -1,0 +1,7 @@
+[
+  {
+    "filename": "manifest.yaml",
+    "failures": [{"msg": "privileged", "metadata": {"id": "K8S-001", "severity": "high", "resource": "Deployment/api"}}],
+    "warnings": [{"msg": "review", "metadata": {"id": "K8S-002", "severity": "medium", "resource": "Deployment/api"}}]
+  }
+]

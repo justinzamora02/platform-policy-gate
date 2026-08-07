@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-for command in make opa conftest; do
+for command in make opa conftest jq; do
 	if ! command -v "$command" >/dev/null 2>&1; then
 		echo "setup: missing required command: $command" >&2
 		exit 1

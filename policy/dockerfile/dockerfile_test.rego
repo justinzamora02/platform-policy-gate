@@ -14,6 +14,11 @@ test_docker_001_allows_approved_registries if {
 	ids(fixtures.dockerfile.compliant) == set()
 }
 
+test_docker_001_allows_the_scratch_pseudo_image if {
+	{stage.image | some stage in dockerfile.external_stages with input as fixtures.dockerfile.scratch} == set()
+	ids(fixtures.dockerfile.scratch) == set()
+}
+
 test_docker_001_denies_unapproved_registries if {
 	ids(fixtures.dockerfile["unapproved-registry"]) == {"DOCKER-001"}
 }

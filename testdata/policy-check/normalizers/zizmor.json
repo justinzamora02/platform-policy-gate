@@ -1,0 +1,8 @@
+[
+  {
+    "ident": "unpinned-uses",
+    "determinations": {"severity": "High"},
+    "locations": [{"symbolic": {"key": {"Local": {"verbatim_path": ".github/workflows/test.yml"}}, "annotation": "jobs.test.steps[0]"}}],
+    "desc": "pin this action"
+  }
+]
