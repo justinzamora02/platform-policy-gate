@@ -10,15 +10,16 @@ set -euo pipefail
 root="${1:-.}"
 
 if [[ -f "$root/package.json" ]]; then
+	tracked_files="$(git -C "$root" ls-files --cached | jq -Rsc 'split("\n")[:-1]')"
 	git -C "$root" ls-files --cached --others --exclude-standard |
-		jq -Rn --slurpfile package "$root/package.json" '
+		jq -Rn --argjson tracked_files "$tracked_files" --slurpfile package "$root/package.json" '
 			[inputs] as $files |
 			{
 				files: $files,
 				kind: "node-project",
 				path: "package.json",
 				manifest: $package[0],
-				tracked_files: $files,
+				tracked_files: $tracked_files,
 				node: {
 					packageManager: ($package[0].packageManager // null),
 					engines: ($package[0].engines // {}),

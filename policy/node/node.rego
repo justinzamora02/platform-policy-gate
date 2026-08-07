@@ -24,6 +24,7 @@ finding(id, severity, resource, message) := {
 package_manager := object.get(input.manifest, "packageManager", null)
 
 exact_pnpm_version if {
+	is_string(package_manager)
 	[manager, version] := split(package_manager, "@")
 	manager == "pnpm"
 	semver.is_valid(version)
