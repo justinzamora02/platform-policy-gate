@@ -226,6 +226,9 @@ as never-expiring — a format Rego cannot parse cannot be checked for expiry.
 aggregated summary it blocks the run, the same as if the exception did not
 exist, rather than quietly ceasing to suppress while everything else stays green.
 
+**An exception may last no more than 90 days (EXC-005).** This keeps the
+break-glass mechanism temporary; a longer waiver must be renewed explicitly.
+
 `policy/exceptions` validates shape and expiry and is the only thing that decides
 which entries are usable; `scripts/apply-exceptions.sh` consumes
 `data.exceptions.active` and never re-derives that judgment, so an entry that

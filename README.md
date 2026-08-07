@@ -74,9 +74,10 @@ exceptions:
     expires: 2026-12-31
 ```
 
-A missing field, a wildcard `id`, an unparseable date, or a past `expires` each
-disqualify the entry *and* emit their own `deny`, so a lapsed exception blocks
-the run rather than quietly ceasing to suppress. See
+A missing field, a wildcard `id`, an unparseable date, a past `expires`, or an
+expiry more than 90 days out each disqualify the entry *and* emit their own
+`deny`, so exceptions remain short-lived and a lapsed exception blocks the run.
+See
 [docs/design.md § Exceptions](docs/design.md#exceptions).
 
 ## Rules
@@ -142,6 +143,7 @@ the run rather than quietly ceasing to suppress. See
 | EXC-002 | `id` names one rule, not a wildcard |
 | EXC-003 | `expires` is a `YYYY-MM-DD` date |
 | EXC-004 | `expires` is in the future |
+| EXC-005 | `expires` is no more than 90 days out |
 
 Every rule emits a structured object rather than a bare string — see
 [docs/design.md § Finding shape](docs/design.md#finding-shape).

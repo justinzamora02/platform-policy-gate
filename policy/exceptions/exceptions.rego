@@ -84,6 +84,23 @@ deny contains msg if {
 
 expired(date) if time.parse_ns("2006-01-02", date) < time.now_ns()
 
+# EXC-005: exceptions are a short-lived break-glass mechanism. Limiting the
+# window prevents a valid-looking entry from becoming a permanent waiver.
+deny contains msg if {
+	some i, exc in input.exceptions
+	is_string(exc.expires)
+	valid_date(exc.expires)
+	time.parse_ns("2006-01-02", exc.expires) > time.now_ns() + 7776000000000000
+
+	msg := {
+		"id": "EXC-005",
+		"severity": "high",
+		"enforcement": "deny",
+		"resource": sprintf("exceptions[%d]", [i]),
+		"msg": sprintf("exception for %q expires more than 90 days from now", [object.get(exc, "id", "<unknown>")]),
+	}
+}
+
 # An entry is usable only if no rule above denied it. Derived from `deny` rather
 # than restating its conditions, so a new EXC-* rule disqualifies its entry the
 # moment it is written.

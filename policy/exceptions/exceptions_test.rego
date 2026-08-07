@@ -49,6 +49,14 @@ test_exc_004_disqualifies_the_entry_from_active if {
 	exceptions.active with input as fixtures.exceptions.expired == set()
 }
 
+test_exc_005_denies_an_exception_more_than_90_days_out if {
+	ids(fixtures.exceptions["too-far-out"]) == {"EXC-005"}
+}
+
+test_exc_005_disqualifies_the_entry_from_active if {
+	exceptions.active with input as fixtures.exceptions["too-far-out"] == set()
+}
+
 # Each entry is judged independently: one expired sibling does not disqualify
 # a valid entry, and does not stop its own EXC-004 from firing.
 test_mixed_file_reports_only_the_bad_entry if {
