@@ -1,0 +1,3 @@
+[
+  {"code": "DL3000", "level": "warning", "file": "Dockerfile", "line": 2, "message": "Use an absolute workdir."}
+]

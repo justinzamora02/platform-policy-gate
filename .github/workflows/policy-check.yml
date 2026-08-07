@@ -679,6 +679,7 @@ jobs:
     # so this has to run whether the others succeed, fail, or are skipped.
     needs:
       [
+        discover-helm,
         kubernetes,
         discover-helm,
         helm,
@@ -743,7 +744,7 @@ jobs:
               *)
                 echo "::error::A policy leg ended with status: $status"
                 exit 1
-              ;;
+                ;;
             esac
           done
           case "$HELM_STATUSES" in
@@ -761,28 +762,21 @@ jobs:
           path: findings
           merge-multiple: false
 
-      # Never applied to the `exceptions` leg's own EXC-* findings, or an
-      # exceptions file could suppress the validation that failed it closed.
-      - name: Apply exceptions
+      - name: Validate findings, apply exceptions, and gate
         env:
+          JOB_STATUSES: >-
+            discover-helm:${{ needs.discover-helm.result }}
+            kubernetes:${{ needs.kubernetes.result }}
+            helm:${{ needs.helm.result }}
+            no-helm-charts:${{ needs.no-helm-charts.result }}
+            zizmor:${{ needs.zizmor.result }}
+            discover-dockerfiles:${{ needs.discover-dockerfiles.result }}
+            hadolint:${{ needs.hadolint.result }}
+            dockerfile:${{ needs.dockerfile.result }}
+            github-workflows:${{ needs.github-workflows.result }}
+            repo-hygiene:${{ needs.repo-hygiene.result }}
+            node:${{ needs.node.result }}
+            exceptions:${{ needs.exceptions.result }}
           EXCEPTIONS_FILE: ${{ inputs.exceptions-file }}
-        run: |
-          set -euo pipefail
-          for dir in findings/*/; do
-            name="$(basename "$dir")"
-            if [ "$name" = "findings-exceptions" ]; then
-              continue
-            fi
-            .policy-gate/scripts/apply-exceptions.sh "$EXCEPTIONS_FILE" "$dir/findings.json" \
-              >"$dir/findings.json.suppressed"
-            mv "$dir/findings.json.suppressed" "$dir/findings.json"
-          done
-
-      - name: Render summary and gate on deny findings
-        env:
           FAIL_ON_WARN: ${{ inputs.fail-on-warn }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          files=(findings/*/findings.json)
-          .policy-gate/scripts/aggregate-findings.sh "${files[@]}"
+        run: bash .policy-gate/scripts/aggregate-policy-check.sh "$EXCEPTIONS_FILE" findings $JOB_STATUSES

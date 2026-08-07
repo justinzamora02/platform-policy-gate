@@ -11,6 +11,7 @@ POLICY_ARGS := policy/ test/ data/
 test: ## Run the Rego unit tests
 	$(OPA) test $(POLICY_ARGS) -v
 	$(CONFTEST) verify -p policy --data test/ --data data/
+	bash ./test/policy-check_test.sh
 
 .PHONY: fmt
 fmt: ## Format Rego sources in place

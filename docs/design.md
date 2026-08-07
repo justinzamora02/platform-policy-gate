@@ -7,6 +7,7 @@ nothing tells you it never really ran.
 - [Finding shape](#finding-shape)
 - [Kubernetes traversal](#kubernetes-traversal)
 - [securityContext inheritance](#securitycontext-inheritance)
+- [ServiceAccount token automount](#serviceaccount-token-automount-k8s-010-and-k8s-015)
 - [Image references](#image-references)
 - [Allowlists fail closed](#allowlists-fail-closed)
 - [GitHub Actions parsing](#github-actions-parsing)
@@ -82,7 +83,7 @@ K8S-009 tests membership against the literal `"ALL"`, because Kubernetes matches
 capability names exactly — a manifest dropping `"all"` drops nothing, and a
 case-insensitive check would wave it through.
 
-## Default ServiceAccount (K8S-010)
+## ServiceAccount token automount (K8S-010 and K8S-015)
 
 The default ServiceAccount is shared by everything in the namespace that never
 asked for an identity, so its token is the one credential a compromised container
@@ -95,11 +96,12 @@ manifest names the default SA explicitly, so a rule testing only
 `serviceAccountName == "default"` would miss nearly every pod actually bound to
 it.
 
-The rule requires an explicit pod-level `automountServiceAccountToken: false`.
+K8S-010 is scoped to an explicit pod-level `automountServiceAccountToken: true`.
 Automount resolves from two documents — the pod spec and the ServiceAccount
 object, pod winning — and Conftest evaluates one rendered document at a time, so
-the ServiceAccount's own setting is out of reach. A pod that says nothing must
-therefore fail closed rather than rely on an unreviewed namespace default.
+it cannot infer the ServiceAccount setting while checking a Pod. K8S-015 checks
+the ServiceAccount document directly and denies an absent or true setting; a Pod
+that says nothing is left for that companion rule to judge.
 
 ## Image references
 
@@ -219,7 +221,7 @@ exceptions:
     owner: platform-team
     ticket: JIRA-123
     reason: registry migration in progress
-    expires: 2026-12-31
+    expires: 2026-09-06                 # 30 days after 2026-08-07; keep within 90 days
 ```
 
 `resource` is optional and, when absent, suppresses every finding for that rule
@@ -240,7 +242,8 @@ aggregated summary it blocks the run, the same as if the exception did not
 exist, rather than quietly ceasing to suppress while everything else stays green.
 
 **An exception may last no more than 90 days (EXC-005).** This keeps the
-break-glass mechanism temporary; a longer waiver must be renewed explicitly.
+break-glass mechanism temporary; choose every documented `expires` date relative
+to the validation date, and renew a longer waiver explicitly.
 
 `policy/exceptions` validates shape and expiry and is the only thing that decides
 which entries are usable; `scripts/apply-exceptions.sh` consumes

@@ -28,6 +28,7 @@ external_stages contains stage if {
 	some instruction in input
 	instruction.Cmd == "from"
 	image := instruction.Value[0]
+	image != "scratch"
 	not lower(image) in stage_aliases
 	stage := {"image": image, "number": instruction.Stage}
 }

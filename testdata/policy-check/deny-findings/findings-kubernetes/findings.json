@@ -1,0 +1,1 @@
+[{"id":"K8S-006","severity":"high","enforcement":"deny","file":"manifest.yaml","resource":"Deployment/api","msg":"unapproved registry"}]
